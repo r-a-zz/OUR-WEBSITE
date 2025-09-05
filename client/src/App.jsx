@@ -1,6 +1,7 @@
 // src/App.jsx
 // src/App.jsx
 import React, { useState, useEffect, useRef } from "react";
+import MusicCard from "./components/ui/MusicCard";
 import {
   Menu,
   X,
@@ -14,75 +15,6 @@ import {
   BookOpen,
   Edit3,
 } from "lucide-react";
-
-//--Music Card component starts here--//
-function MusicCard() {
-  const [playing, setPlaying] = useState(false);
-
-  return (
-    <div
-      onClick={() => setPlaying((p) => !p)}
-      className={`cursor-pointer bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 transition-all duration-300
-        ${playing ? "shadow-2xl scale-[1.01] bg-white/15" : "hover:bg-white/15"}
-      `}
-    >
-      <h3 className="text-2xl font-semibold text-white mb-4 flex items-center gap-3">
-        <span
-          className={`inline-block transform transition-transform duration-500 ${
-            playing ? "animate-spin scale-110" : "animate-pulse"
-          }`}
-          aria-hidden="true"
-        >
-          <Music size={22} />
-        </span>
-        Music
-        <span className="ml-3 text-sm text-white/60">
-          {playing ? "Playing" : "Tap to play"}
-        </span>
-      </h3>
-
-      <p className="text-white/80 mb-4">
-        Chill beats and vibes to keep you focused — click to open the mini
-        player.
-      </p>
-
-      {/* Player panel (visible when playing) */}
-      <div
-        className={`overflow-hidden transition-[max-height] duration-500 ${
-          playing ? "max-h-40" : "max-h-0"
-        }`}
-      >
-        <div className="mt-2 p-3 bg-white/5 rounded-lg border border-white/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-white">Now Playing</div>
-              <div className="text-xs text-white/70">
-                Lo-fi Chill — Artist Name
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPlaying(false);
-                }}
-                className="px-3 py-1 text-sm bg-white/10 rounded-md hover:bg-white/20 transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-
-          {/* simple progress visualization */}
-          <div className="mt-3 h-2 bg-white/10 rounded-full">
-            <div className="h-2 bg-blue-400 rounded-full w-1/3" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-//--Music Card component ends here--//
 
 /* Diary component with modal editor starts here */
 function Diary({ openRequest, clearOpenRequest }) {
@@ -402,6 +334,8 @@ const App = () => {
             </div>
           </div>
         );
+      // In client/src/App.jsx, inside the renderContent function:
+
       case "services":
         return (
           <div className="space-y-8">
@@ -412,9 +346,10 @@ const App = () => {
               At your Service ma'am !
             </h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* <-- MusicCard inserted here --> */}
+              {/* The MusicCard is self-contained and manages its own state */}
               <MusicCard />
 
+              {/* This is a simple, static card that will NOT expand */}
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
                 <h3 className="text-2xl font-semibold text-white mb-4">
                   UI/UX Design
@@ -424,6 +359,8 @@ const App = () => {
                   experience.
                 </p>
               </div>
+
+              {/* These other cards are also static */}
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
                 <h3 className="text-2xl font-semibold text-white mb-4">
                   Mobile Apps
@@ -438,8 +375,7 @@ const App = () => {
                   Consulting
                 </h3>
                 <p className="text-white/80">
-                  Strategic technology consulting to help your business grow and
-                  succeed.
+                  Strategic technology consulting to help your business grow and succeed.
                 </p>
               </div>
             </div>
