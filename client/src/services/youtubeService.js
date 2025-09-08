@@ -3,8 +3,10 @@
  * Handles all YouTube Data API v3 interactions
  */
 
-const YOUTUBE_API_KEY = "AIzaSyDVYNLILGqJ7hUf3FDjgUq1EseJEbxh7PA";
-const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
+// In production the client should proxy requests to the server.
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+
+const YOUTUBE_API_BASE_URL = API_BASE; // client will call our server endpoints
 
 class YouTubeService {
   /**
@@ -16,16 +18,13 @@ class YouTubeService {
    */
   async searchVideos(query, maxResults = 10, type = "video") {
     try {
-      const url = new URL(`${YOUTUBE_API_BASE_URL}/search`);
-      url.searchParams.append("part", "snippet");
-      url.searchParams.append("q", query);
-      url.searchParams.append("type", type);
-      url.searchParams.append("maxResults", maxResults);
-      url.searchParams.append("key", YOUTUBE_API_KEY);
-      url.searchParams.append("order", "relevance");
-      url.searchParams.append("safeSearch", "moderate");
+  // Call the server proxy endpoint instead of calling YouTube directly
+  const url = new URL(`${YOUTUBE_API_BASE_URL}/api/youtube/search`);
+  url.searchParams.append("q", query);
+  url.searchParams.append("maxResults", maxResults);
+  url.searchParams.append("type", type);
 
-      const response = await fetch(url);
+  const response = await fetch(url.toString());
 
       if (!response.ok) {
         throw new Error(
@@ -49,12 +48,8 @@ class YouTubeService {
    */
   async getVideoDetails(videoId) {
     try {
-      const url = new URL(`${YOUTUBE_API_BASE_URL}/videos`);
-      url.searchParams.append("part", "snippet,statistics,contentDetails");
-      url.searchParams.append("id", videoId);
-      url.searchParams.append("key", YOUTUBE_API_KEY);
-
-      const response = await fetch(url);
+  const url = new URL(`${YOUTUBE_API_BASE_URL}/api/youtube/video/${encodeURIComponent(videoId)}`);
+  const response = await fetch(url.toString());
 
       if (!response.ok) {
         throw new Error(`YouTube API error: ${response.status}`);

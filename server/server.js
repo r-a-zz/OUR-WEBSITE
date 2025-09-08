@@ -6,9 +6,14 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// YouTube API Configuration
-const YOUTUBE_API_KEY = "AIzaSyDVYNLILGqJ7hUf3FDjgUq1EseJEbxh7PA";
+// YouTube API Configuration (require env var for safety)
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
+
+if (!YOUTUBE_API_KEY) {
+  console.error("FATAL: Missing required environment variable YOUTUBE_API_KEY. Set it in server/.env or your environment.");
+  process.exit(1);
+}
 
 app.use(cors());
 app.use(express.json());
