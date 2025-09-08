@@ -1,29 +1,10 @@
 import React from "react";
 import { motion } from "framer-motion";
-import {
-  Code,
-  Smartphone,
-  Palette,
-  Zap,
-  Shield,
-  Headphones,
-} from "lucide-react";
+import { Smartphone, Palette, Zap, Shield, Headphones } from "lucide-react";
+import YouTubeMusicCard from "../ui/YouTubeMusicCard";
 
 const ServicesPage = () => {
   const services = [
-    {
-      icon: Code,
-      title: "Web Development",
-      description:
-        "Custom web applications built with modern technologies and best practices.",
-      features: [
-        "React & Next.js",
-        "Node.js Backend",
-        "Database Design",
-        "API Development",
-      ],
-      color: "from-blue-500 to-cyan-500",
-    },
     {
       icon: Palette,
       title: "UI/UX Design",
@@ -122,12 +103,23 @@ const ServicesPage = () => {
 
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        {/* YouTube Music Card - Featured Service */}
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.8 }}
+          className="md:col-span-2 xl:col-span-1"
+        >
+          <YouTubeMusicCard />
+        </motion.div>
+
+        {/* Other Services */}
         {services.map((service, index) => (
           <motion.div
             key={index}
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 + index * 0.1, duration: 0.8 }}
+            transition={{ delay: 0.7 + index * 0.1, duration: 0.8 }}
             whileHover={{
               y: -10,
               transition: { type: "spring", stiffness: 300, damping: 10 },

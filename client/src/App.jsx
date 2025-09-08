@@ -20,7 +20,7 @@ const HomePage = lazy(() => import("./components/Pages/HomePage"));
 const AboutPage = lazy(() => import("./components/Pages/AboutPage"));
 const ServicesPage = lazy(() => import("./components/Pages/ServicesPage"));
 const PortfolioPage = lazy(() => import("./components/Pages/PortfolioPage"));
-const BlogPage = lazy(() => import("./components/Pages/BlogPage"));
+const LoveNotesPage = lazy(() => import("./components/Pages/LoveNotesPage"));
 const ContactPage = lazy(() => import("./components/Pages/ContactPage"));
 
 // Loading component
@@ -62,10 +62,10 @@ const AppContent = () => {
   const navItems = React.useMemo(
     () => [
       { id: "home", label: "♡ Our Love", icon: Home },
-      { id: "about", label: "♡ About Us", icon: Info },
       { id: "services", label: "♡ Our Dreams", icon: Layers },
-      { id: "portfolio", label: "♡ Memories", icon: Briefcase },
       { id: "blog", label: "♡ Love Notes", icon: FileText },
+      { id: "about", label: "♡ About Us", icon: Info },
+      { id: "portfolio", label: "♡ Memories", icon: Briefcase },
       { id: "contact", label: "♡ Forever", icon: Mail },
     ],
     []
@@ -101,10 +101,11 @@ const AppContent = () => {
         "portfolio, projects, web development, case studies, client work",
     },
     blog: {
-      title: "Blog - Web Development Insights & Tutorials",
+      title: "Love Notes - Our Digital Diary",
       description:
-        "Stay updated with the latest web development trends, tutorials, and industry insights from our expert team.",
-      keywords: "blog, web development, tutorials, trends, technology news",
+        "Our private collection of love notes, memories, and precious moments shared together in our digital diary.",
+      keywords:
+        "love notes, diary, memories, relationship, digital journal, love story",
     },
     contact: {
       title: "Contact Us - Get In Touch",
@@ -133,7 +134,7 @@ const AppContent = () => {
       about: <AboutPage />,
       services: <ServicesPage />,
       portfolio: <PortfolioPage />,
-      blog: <BlogPage />,
+      blog: <LoveNotesPage />,
       contact: <ContactPage />,
     };
 

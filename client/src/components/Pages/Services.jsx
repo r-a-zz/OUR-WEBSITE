@@ -1,5 +1,5 @@
 import React from "react";
-import MusicCard from "../ui/MusicCard";
+import YouTubeMusicCard from "../ui/YouTubeMusicCard";
 
 export default function Services() {
   return (
@@ -11,7 +11,7 @@ export default function Services() {
         At your Service ma'am !
       </h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <MusicCard />
+        <YouTubeMusicCard />
         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
           <h3 className="text-2xl font-semibold text-white mb-4">
             UI/UX Design
