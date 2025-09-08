@@ -1,0 +1,32 @@
+# EditorConfig helps maintain consistent coding styles across IDEs and editors
+# https://editorconfig.org
+
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# JavaScript / TypeScript / JSON / JSX / TSX
+[*.{js,ts,jsx,tsx,json}]
+indent_style = space
+indent_size = 2
+
+# HTML / CSS / SCSS
+[*.{html,css,scss}]
+indent_style = space
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+end_of_line = lf
