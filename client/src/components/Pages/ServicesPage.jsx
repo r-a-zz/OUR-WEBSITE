@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Smartphone, Palette, Zap, Shield, Headphones } from "lucide-react";
-import YouTubeMusicCard from "../ui/YouTubeMusicCard";
+import YouTubeMusicCard from "../UI/YouTubeMusicCard.jsx";
 
 const ServicesPage = () => {
   const services = [

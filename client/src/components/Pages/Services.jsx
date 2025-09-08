@@ -1,5 +1,5 @@
 import React from "react";
-import YouTubeMusicCard from "../ui/YouTubeMusicCard";
+import YouTubeMusicCard from "../UI/YouTubeMusicCard.jsx";
 
 export default function Services() {
   return (
