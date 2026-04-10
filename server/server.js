@@ -9,6 +9,16 @@ require("dotenv").config();
 
 const app = express();
 
+const parseBooleanFlag = (value, defaultValue = false) => {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return defaultValue;
+  }
+
+  return ["1", "true", "yes", "on"].includes(
+    String(value).trim().toLowerCase(),
+  );
+};
+
 const PORT = Number.parseInt(process.env.PORT || "5000", 10);
 const YOUTUBE_API_KEY = (process.env.YOUTUBE_API_KEY || "").trim();
 const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
@@ -34,6 +44,16 @@ const TRENDING_CACHE_TTL_MS = Number.parseInt(
   10,
 );
 const REDIS_URL = (process.env.REDIS_URL || "").trim();
+const REDIS_USERNAME = (process.env.REDIS_USERNAME || "").trim();
+const REDIS_PASSWORD = (process.env.REDIS_PASSWORD || "").trim();
+const REDIS_TLS_ENABLED = parseBooleanFlag(
+  process.env.REDIS_TLS_ENABLED,
+  false,
+);
+const REDIS_TLS_REJECT_UNAUTHORIZED = parseBooleanFlag(
+  process.env.REDIS_TLS_REJECT_UNAUTHORIZED,
+  true,
+);
 const REDIS_CONNECT_TIMEOUT_MS = Number.parseInt(
   process.env.REDIS_CONNECT_TIMEOUT_MS || "1500",
   10,
@@ -55,8 +75,23 @@ const API_RATE_LIMIT_MAX_REQUESTS = Number.parseInt(
   process.env.API_RATE_LIMIT_MAX_REQUESTS || "120",
   10,
 );
-const METRICS_ENABLED =
-  (process.env.METRICS_ENABLED || "true").trim().toLowerCase() !== "false";
+const API_RATE_LIMIT_SEARCH_MAX_REQUESTS = Number.parseInt(
+  process.env.API_RATE_LIMIT_SEARCH_MAX_REQUESTS || "60",
+  10,
+);
+const API_RATE_LIMIT_VIDEO_MAX_REQUESTS = Number.parseInt(
+  process.env.API_RATE_LIMIT_VIDEO_MAX_REQUESTS || "90",
+  10,
+);
+const API_RATE_LIMIT_TRENDING_MAX_REQUESTS = Number.parseInt(
+  process.env.API_RATE_LIMIT_TRENDING_MAX_REQUESTS || "60",
+  10,
+);
+const API_RATE_LIMIT_METRICS_MAX_REQUESTS = Number.parseInt(
+  process.env.API_RATE_LIMIT_METRICS_MAX_REQUESTS || "30",
+  10,
+);
+const METRICS_ENABLED = parseBooleanFlag(process.env.METRICS_ENABLED, true);
 
 const resolveCorsOrigin = () => {
   if (!CORS_ORIGIN || CORS_ORIGIN === "*") {
@@ -119,6 +154,7 @@ const setApiCacheHeaders = (res, ttlMs) => {
     `public, max-age=${browserMaxAge}, s-maxage=${sharedMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
   );
   res.set("Vary", "Accept-Encoding, Origin");
+  res.set("X-Cache-Provider", cacheStore.type);
 };
 
 const setNoStoreHeaders = (res) => {
@@ -135,6 +171,7 @@ const normalizeMetricsRoute = (routePath = "") => {
 const metricsRegistry = new promClient.Registry();
 let apiRequestDurationMs = null;
 let apiRequestsTotal = null;
+let apiCacheEventsTotal = null;
 
 if (METRICS_ENABLED) {
   promClient.collectDefaultMetrics({ register: metricsRegistry });
@@ -151,6 +188,13 @@ if (METRICS_ENABLED) {
     name: "api_requests_total",
     help: "Total number of API requests",
     labelNames: ["method", "route", "status_code"],
+    registers: [metricsRegistry],
+  });
+
+  apiCacheEventsTotal = new promClient.Counter({
+    name: "api_cache_events_total",
+    help: "Total cache events by route and result",
+    labelNames: ["route", "result", "provider"],
     registers: [metricsRegistry],
   });
 }
@@ -181,24 +225,66 @@ app.use((req, res, next) => {
   return next();
 });
 
-const apiRateLimiter = rateLimit({
-  windowMs: API_RATE_LIMIT_WINDOW_MS,
+const createApiRateLimiter = ({
+  limit,
+  code,
+  message,
+  windowMs = API_RATE_LIMIT_WINDOW_MS,
+  skip,
+}) => {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    skip,
+    handler: (_req, res) => {
+      setNoStoreHeaders(res);
+      res.status(429).json(
+        createError(message || "Too many requests. Please try again shortly.", {
+          code: code || "RATE_LIMITED",
+        }),
+      );
+    },
+  });
+};
+
+const apiGlobalRateLimiter = createApiRateLimiter({
   limit: API_RATE_LIMIT_MAX_REQUESTS,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
+  code: "API_GLOBAL_RATE_LIMITED",
   skip: (req) =>
     req.path === "/health" || req.path === "/" || req.path === "/metrics",
-  handler: (_req, res) => {
-    setNoStoreHeaders(res);
-    res.status(429).json(
-      createError("Too many requests. Please try again shortly.", {
-        code: "RATE_LIMITED",
-      }),
-    );
-  },
 });
 
-app.use("/api", apiRateLimiter);
+const apiSearchRateLimiter = createApiRateLimiter({
+  limit: API_RATE_LIMIT_SEARCH_MAX_REQUESTS,
+  code: "API_SEARCH_RATE_LIMITED",
+  message: "Search rate limit reached. Please slow down and try again.",
+});
+
+const apiVideoRateLimiter = createApiRateLimiter({
+  limit: API_RATE_LIMIT_VIDEO_MAX_REQUESTS,
+  code: "API_VIDEO_RATE_LIMITED",
+  message: "Video requests are limited right now. Please try again shortly.",
+});
+
+const apiTrendingRateLimiter = createApiRateLimiter({
+  limit: API_RATE_LIMIT_TRENDING_MAX_REQUESTS,
+  code: "API_TRENDING_RATE_LIMITED",
+  message: "Trending requests are limited right now. Please try again shortly.",
+});
+
+const apiMetricsRateLimiter = createApiRateLimiter({
+  limit: API_RATE_LIMIT_METRICS_MAX_REQUESTS,
+  code: "API_METRICS_RATE_LIMITED",
+  message: "Metrics endpoint rate limit reached.",
+});
+
+app.use("/api", apiGlobalRateLimiter);
+app.use("/api/youtube/search", apiSearchRateLimiter);
+app.use("/api/youtube/video", apiVideoRateLimiter);
+app.use("/api/youtube/trending", apiTrendingRateLimiter);
+app.use("/api/metrics", apiMetricsRateLimiter);
 
 const apiResponseCache = new Map();
 
@@ -206,6 +292,14 @@ const cacheStore = {
   type: "memory",
   redisClient: null,
   redisReady: false,
+};
+
+const recordCacheEvent = (route, result) => {
+  if (!apiCacheEventsTotal) {
+    return;
+  }
+
+  apiCacheEventsTotal.labels(route, result, cacheStore.type).inc();
 };
 
 let lastRedisWarningAt = 0;
@@ -226,7 +320,7 @@ const setupRedisCache = () => {
     return;
   }
 
-  const redisClient = new Redis(REDIS_URL, {
+  const redisOptions = {
     lazyConnect: true,
     keyPrefix: REDIS_KEY_PREFIX || undefined,
     maxRetriesPerRequest: 2,
@@ -237,7 +331,23 @@ const setupRedisCache = () => {
         Math.max(REDIS_RETRY_BASE_DELAY_MS, 50) * attempt,
         Math.max(REDIS_RETRY_MAX_DELAY_MS, 200),
       ),
-  });
+  };
+
+  if (REDIS_USERNAME) {
+    redisOptions.username = REDIS_USERNAME;
+  }
+
+  if (REDIS_PASSWORD) {
+    redisOptions.password = REDIS_PASSWORD;
+  }
+
+  if (REDIS_TLS_ENABLED) {
+    redisOptions.tls = {
+      rejectUnauthorized: REDIS_TLS_REJECT_UNAUTHORIZED,
+    };
+  }
+
+  const redisClient = new Redis(REDIS_URL, redisOptions);
 
   redisClient.on("ready", () => {
     cacheStore.redisReady = true;
@@ -578,13 +688,18 @@ app.get("/api/health", (_req, res) => {
         memoryCacheEntries: apiResponseCache.size,
         redisEnabled: Boolean(REDIS_URL),
         redisReady: cacheStore.redisReady,
+        redisTlsEnabled: REDIS_TLS_ENABLED,
         metricsEnabled: METRICS_ENABLED,
       },
       {
         mode: YOUTUBE_API_KEY ? "live" : "demo",
         rateLimit: {
           windowMs: API_RATE_LIMIT_WINDOW_MS,
-          maxRequests: API_RATE_LIMIT_MAX_REQUESTS,
+          globalMaxRequests: API_RATE_LIMIT_MAX_REQUESTS,
+          searchMaxRequests: API_RATE_LIMIT_SEARCH_MAX_REQUESTS,
+          videoMaxRequests: API_RATE_LIMIT_VIDEO_MAX_REQUESTS,
+          trendingMaxRequests: API_RATE_LIMIT_TRENDING_MAX_REQUESTS,
+          metricsMaxRequests: API_RATE_LIMIT_METRICS_MAX_REQUESTS,
         },
       },
     ),
@@ -640,6 +755,7 @@ app.get("/api/youtube/search", async (req, res) => {
   const cacheKey = `search:${query.toLowerCase()}:${maxResults}:${type}`;
   const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
+    recordCacheEvent("/api/youtube/search", "hit");
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
 
@@ -653,6 +769,7 @@ app.get("/api/youtube/search", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/search", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -678,6 +795,7 @@ app.get("/api/youtube/search", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/search", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     const fallbackResults = getDemoSearchResults(query, maxResults);
@@ -692,6 +810,7 @@ app.get("/api/youtube/search", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/search", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   }
 });
@@ -710,6 +829,7 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
   const cacheKey = `video:${videoId}`;
   const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
+    recordCacheEvent("/api/youtube/video/:videoId", "hit");
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
 
@@ -725,6 +845,7 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/video/:videoId", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -750,6 +871,7 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/video/:videoId", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     if (error.response?.status === 403) {
@@ -776,6 +898,7 @@ app.get("/api/youtube/trending", async (req, res) => {
   const cacheKey = `trending:${maxResults}:${categoryId || "all"}:${regionCode}`;
   const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
+    recordCacheEvent("/api/youtube/trending", "hit");
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
 
@@ -791,6 +914,7 @@ app.get("/api/youtube/trending", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/trending", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -825,6 +949,7 @@ app.get("/api/youtube/trending", async (req, res) => {
     });
 
     await setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    recordCacheEvent("/api/youtube/trending", "miss");
     return res.set("X-Cache", "MISS").json(payload);
   } catch (_error) {
     return res.status(500).json(createError("Failed to get trending videos"));
