@@ -14,8 +14,15 @@
  */
 
 import React, { memo, useCallback, useRef, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Heart, Mail } from "lucide-react";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  Heart,
+  Mail,
+  CalendarDays,
+  BookHeart,
+  ShoppingBag,
+} from "lucide-react";
 import { useResponsive } from "../../hooks/useResponsive";
 import {
   useClickOutside,
@@ -51,7 +58,7 @@ const SidebarOverlay = memo(({ isOpen, onClose, isMobile }) => {
         onClose();
       }
     },
-    [onClose, componentName]
+    [onClose, componentName],
   );
 
   // Body scroll management with cleanup - mobile only
@@ -77,13 +84,13 @@ const SidebarOverlay = memo(({ isOpen, onClose, isMobile }) => {
           ? "bg-black/50 backdrop-blur-sm" // Mobile: enhanced visual feedback
           : "bg-black/20" // Desktop: subtle overlay
       }`,
-    [isMobile]
+    [isMobile],
   );
 
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
-        <motion.div
+        <Motion.div
           variants={overlayVariants}
           initial="hidden"
           animate="visible"
@@ -122,14 +129,14 @@ const SidebarHeader = memo(({ onClose }) => {
         handleClose();
       }
     },
-    [handleClose]
+    [handleClose],
   );
 
   return (
     <header className="flex items-start justify-between mb-8 sm:mb-10">
       {/* Brand section with improved typography */}
       <div className="flex-1 pr-4">
-        <motion.h2
+        <Motion.h2
           initial={ANIMATION_VARIANTS.FADE_IN.hidden}
           animate={ANIMATION_VARIANTS.FADE_IN.visible}
           transition={{ ...TRANSITIONS.NORMAL, delay: 0.1 }}
@@ -140,11 +147,11 @@ const SidebarHeader = memo(({ onClose }) => {
             aria-hidden="true"
           />
           <span className="break-words">{APP_CONFIG.SITE_NAME}</span>
-        </motion.h2>
+        </Motion.h2>
       </div>
 
       {/* Enhanced close button with better accessibility */}
-      <motion.button
+      <Motion.button
         onClick={handleClose}
         onKeyDown={handleKeyDown}
         initial={{ opacity: 0, scale: 0.8 }}
@@ -157,7 +164,7 @@ const SidebarHeader = memo(({ onClose }) => {
         type="button"
       >
         <X size={18} className="sm:w-5 sm:h-5" aria-hidden="true" />
-      </motion.button>
+      </Motion.button>
     </header>
   );
 });
@@ -168,8 +175,6 @@ SidebarHeader.displayName = `${COMPONENT_NAME}.Header`;
  * Love Message component with enhanced styling and accessibility
  */
 const LoveMessage = memo(() => {
-  const componentName = `${COMPONENT_NAME}.LoveMessage`;
-
   // Memoized animation variants
   const messageVariants = useMemo(
     () => ({
@@ -179,11 +184,11 @@ const LoveMessage = memo(() => {
         transition: { ...TRANSITIONS.NORMAL, delay: 0.4 },
       },
     }),
-    []
+    [],
   );
 
   return (
-    <motion.div
+    <Motion.div
       variants={messageVariants}
       initial="hidden"
       animate="visible"
@@ -194,7 +199,7 @@ const LoveMessage = memo(() => {
       <p className="text-xs sm:text-sm text-pink-200/90 text-center italic leading-relaxed">
         "{APP_CONFIG.LOVE.TAGLINE}"
       </p>
-    </motion.div>
+    </Motion.div>
   );
 });
 
@@ -215,7 +220,7 @@ const SidebarFooter = memo(() => {
         transition: { ...TRANSITIONS.NORMAL, delay: 0.5 },
       },
     }),
-    []
+    [],
   );
 
   const handleEmailClick = useCallback(() => {
@@ -225,7 +230,7 @@ const SidebarFooter = memo(() => {
   }, [componentName]);
 
   return (
-    <motion.footer
+    <Motion.footer
       variants={footerVariants}
       initial="hidden"
       animate="visible"
@@ -233,7 +238,7 @@ const SidebarFooter = memo(() => {
     >
       {/* Enhanced contact section */}
       <div className="flex items-center justify-center mb-4">
-        <motion.a
+        <Motion.a
           href={`mailto:${APP_CONFIG.CONTACT.EMAIL}`}
           onClick={handleEmailClick}
           whileHover={{ scale: 1.1, y: -2 }}
@@ -242,23 +247,23 @@ const SidebarFooter = memo(() => {
           aria-label={`Send email to ${APP_CONFIG.CONTACT.EMAIL}`}
         >
           <Mail className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
-        </motion.a>
+        </Motion.a>
       </div>
 
       {/* Animated footer text */}
       <p className="text-center text-pink-400/50 text-xs leading-relaxed">
         Made with{" "}
-        <motion.span
+        <Motion.span
           animate={{ scale: [1, 1.2, 1] }}
           transition={{ duration: 1.5, repeat: Infinity }}
           className="text-red-400 inline-block"
           aria-label="love"
         >
           ♥
-        </motion.span>{" "}
+        </Motion.span>{" "}
         for {APP_CONFIG.LOVE.PARTNER_NAME}
       </p>
-    </motion.footer>
+    </Motion.footer>
   );
 });
 
@@ -319,7 +324,7 @@ const Sidebar = memo(
             onToggle();
             logger.debug(
               componentName,
-              "Auto-closed sidebar on mobile navigation"
+              "Auto-closed sidebar on mobile navigation",
             );
           }
         } catch (error) {
@@ -337,7 +342,7 @@ const Sidebar = memo(
         isOpen,
         activeSection,
         componentName,
-      ]
+      ],
     );
 
     // Enhanced click outside with proper cleanup
@@ -360,7 +365,7 @@ const Sidebar = memo(
             ? "w-80 max-w-[85vw]" // Mobile: responsive width with viewport constraint
             : "w-64 sm:w-72 md:w-80" // Desktop: progressive width scaling
         }`,
-      [isMobile]
+      [isMobile],
     );
 
     // Memoized style object to prevent re-creation
@@ -375,7 +380,7 @@ const Sidebar = memo(
         backfaceVisibility: "hidden",
         touchAction: "pan-y", // Enhanced mobile scroll performance
       }),
-      []
+      [],
     );
 
     // Memoized sidebar variants for consistent animations
@@ -384,7 +389,7 @@ const Sidebar = memo(
         hidden: ANIMATION_VARIANTS.SIDEBAR.hidden,
         visible: ANIMATION_VARIANTS.SIDEBAR.visible,
       }),
-      []
+      [],
     );
 
     // Error boundary for navigation items rendering
@@ -392,7 +397,7 @@ const Sidebar = memo(
       try {
         return (
           navItems?.map((item, index) => (
-            <motion.div
+            <Motion.div
               key={`nav-item-${item.id}`}
               initial={ANIMATION_VARIANTS.FADE_IN.hidden}
               animate={ANIMATION_VARIANTS.FADE_IN.visible}
@@ -403,7 +408,7 @@ const Sidebar = memo(
                 isActive={activeSection === item.id}
                 onClick={() => handleNavigate(item.id)}
               />
-            </motion.div>
+            </Motion.div>
           )) || []
         );
       } catch (error) {
@@ -414,6 +419,30 @@ const Sidebar = memo(
         return null;
       }
     }, [navItems, activeSection, handleNavigate, componentName]);
+
+    const quickActions = useMemo(
+      () => [
+        {
+          id: "daily",
+          label: "Daily Hub",
+          icon: CalendarDays,
+          helper: "Tasks, calendar, and thought",
+        },
+        {
+          id: "blog",
+          label: "Write Love Note",
+          icon: BookHeart,
+          helper: "Journal memories in one tap",
+        },
+        {
+          id: "shopping",
+          label: "Shopping Compare",
+          icon: ShoppingBag,
+          helper: "Live search, filters, and best matches",
+        },
+      ],
+      [],
+    );
 
     // Don't render until hydrated to prevent SSR mismatches
     if (!isHydrated) {
@@ -430,7 +459,7 @@ const Sidebar = memo(
         />
 
         {/* Main sidebar with comprehensive enhancements */}
-        <motion.aside
+        <Motion.aside
           ref={sidebarRef}
           initial="hidden"
           animate={isOpen ? "visible" : "hidden"}
@@ -445,6 +474,37 @@ const Sidebar = memo(
           {/* Scrollable content container with enhanced UX */}
           <div className="p-5 sm:p-6 md:p-7 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-cyan-500/20 scrollbar-track-transparent">
             <SidebarHeader onClose={onToggle} />
+
+            {/* UX orientation card */}
+            <div className="mb-6 p-4 rounded-2xl border border-cyan-400/20 bg-cyan-900/10 backdrop-blur-sm">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/80 mb-3">
+                Quick Access
+              </p>
+
+              <div className="space-y-2">
+                {quickActions.map((action) => {
+                  const ActionIcon = action.icon;
+                  return (
+                    <button
+                      key={`quick-action-${action.id}`}
+                      type="button"
+                      onClick={() => handleNavigate(action.id)}
+                      className="w-full text-left rounded-xl border border-cyan-500/20 bg-black/25 hover:bg-cyan-500/10 px-3 py-2 transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-2 text-cyan-100">
+                        <ActionIcon size={14} />
+                        <span className="text-sm font-medium">
+                          {action.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-cyan-100/60 mt-0.5">
+                        {action.helper}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Enhanced navigation section */}
             <nav
@@ -464,7 +524,7 @@ const Sidebar = memo(
           </div>
 
           {/* Enhanced animated border with performance optimization */}
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ ...TRANSITIONS.NORMAL, delay: 0.3 }}
@@ -485,10 +545,10 @@ const Sidebar = memo(
             }}
             aria-hidden="true"
           />
-        </motion.aside>
+        </Motion.aside>
       </>
     );
-  }
+  },
 );
 
 Sidebar.displayName = COMPONENT_NAME;

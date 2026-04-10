@@ -15,7 +15,7 @@
 
 import React, { memo, useMemo, useCallback } from "react";
 import { Menu, Heart } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { useLoveCounter } from "../../hooks/useLoveCounter";
 import { useResponsive } from "../../hooks/useResponsive";
 import { formatTimeUnit } from "../../utils/dateUtils";
@@ -164,7 +164,7 @@ const MenuToggleButton = memo(({ onToggle, isSidebarOpen, isMobile }) => {
   );
 
   return (
-    <motion.button
+    <Motion.button
       variants={ANIMATION_VARIANTS.SCALE}
       whileHover="hover"
       whileTap="tap"
@@ -179,7 +179,7 @@ const MenuToggleButton = memo(({ onToggle, isSidebarOpen, isMobile }) => {
       type="button"
     >
       <Menu size={20} className="sm:w-6 sm:h-6" aria-hidden="true" />
-    </motion.button>
+    </Motion.button>
   );
 });
 
@@ -235,7 +235,12 @@ MadeWithLove.displayName = `${COMPONENT_NAME}.MadeWithLove`;
  * Header Component - Main navigation header with love counter
  */
 const Header = memo(
-  ({ onToggleSidebar, currentSection, isSidebarOpen = false }) => {
+  ({
+    onToggleSidebar,
+    currentSection,
+    currentSectionLabel: currentSectionLabelProp,
+    isSidebarOpen = false,
+  }) => {
     const loveTime = useLoveCounter();
     const { isMobile, isTablet, isDesktop } = useResponsive();
 
@@ -245,10 +250,16 @@ const Header = memo(
       return "mobile";
     }, [isDesktop, isTablet]);
 
-    const currentSectionLabel = useMemo(
-      () => currentSection.charAt(0).toUpperCase() + currentSection.slice(1),
-      [currentSection],
-    );
+    const currentSectionLabel = useMemo(() => {
+      if (
+        typeof currentSectionLabelProp === "string" &&
+        currentSectionLabelProp.trim().length > 0
+      ) {
+        return currentSectionLabelProp;
+      }
+
+      return currentSection.charAt(0).toUpperCase() + currentSection.slice(1);
+    }, [currentSection, currentSectionLabelProp]);
 
     const handleToggleSidebar = useCallback(() => {
       onToggleSidebar();
@@ -265,7 +276,7 @@ const Header = memo(
     };
 
     return (
-      <motion.header
+      <Motion.header
         initial="initial"
         animate="animate"
         variants={headerVariants}
@@ -278,7 +289,7 @@ const Header = memo(
       >
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Menu Button - Always visible on mobile, desktop logic */}
-          <motion.button
+          <Motion.button
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
@@ -297,10 +308,10 @@ const Header = memo(
             }
           >
             <Menu size={20} className="sm:w-6 sm:h-6" />
-          </motion.button>
+          </Motion.button>
 
           {/* Header Content */}
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: APP_CONFIG.ANIMATION_DELAYS.HEADER }}
@@ -321,9 +332,9 @@ const Header = memo(
                 {LOVE_MESSAGES.MADE_WITH_LOVE}
               </span>
             </div>
-          </motion.div>
+          </Motion.div>
         </div>
-      </motion.header>
+      </Motion.header>
     );
   },
 );

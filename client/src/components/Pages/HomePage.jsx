@@ -1,9 +1,43 @@
-import React, { memo } from "react";
-import { motion } from "framer-motion";
-import { Rocket, Heart, Stars, Globe } from "lucide-react";
+import React, { memo, useMemo } from "react";
+import { motion as Motion } from "framer-motion";
+import { Rocket, Heart, Stars } from "lucide-react";
 import { useLoveCounter } from "../../hooks/useLoveCounter";
 import { useResponsive } from "../../hooks/useResponsive";
 import { LOVE_MESSAGES, APP_CONFIG } from "../../constants";
+
+const DAILY_THOUGHTS = [
+  "Tiny acts of care make ordinary days unforgettable.",
+  "Give today one meaningful moment and protect it.",
+  "A calm mind and a kind message can fix half the day.",
+  "Consistency beats intensity. Show up gently, every day.",
+  "Love is built in small routines done with attention.",
+  "Choose progress, not pressure. One step is enough for today.",
+  "Your energy goes where your attention goes. Spend it wisely.",
+  "Pause, breathe, and respond with softness.",
+  "Create one memory today, even if it is tiny.",
+  "Gratitude turns a regular day into a rich one.",
+];
+
+const toLocalDayKey = (input = new Date()) => {
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const hashText = (value) => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+};
 
 /**
  * FloatingBalloons Component - Subtle floating balloons animation
@@ -26,7 +60,7 @@ const FloatingBalloons = memo(() => {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
       {/* First Balloon - Pink */}
-      <motion.div
+      <Motion.div
         variants={balloonVariants}
         animate="animate"
         transition={{
@@ -49,7 +83,7 @@ const FloatingBalloons = memo(() => {
             }}
           />
           {/* String */}
-          <motion.div
+          <Motion.div
             variants={stringVariants}
             animate="animate"
             transition={{
@@ -60,10 +94,10 @@ const FloatingBalloons = memo(() => {
             className="absolute top-full left-1/2 w-0.5 h-24 bg-pink-300/40 transform -translate-x-1/2 origin-top"
           />
         </div>
-      </motion.div>
+      </Motion.div>
 
       {/* Second Balloon - Purple */}
-      <motion.div
+      <Motion.div
         variants={balloonVariants}
         animate="animate"
         transition={{
@@ -86,7 +120,7 @@ const FloatingBalloons = memo(() => {
             }}
           />
           {/* String */}
-          <motion.div
+          <Motion.div
             variants={stringVariants}
             animate="animate"
             transition={{
@@ -98,7 +132,7 @@ const FloatingBalloons = memo(() => {
             className="absolute top-full left-1/2 w-0.5 h-20 bg-purple-300/40 transform -translate-x-1/2 origin-top"
           />
         </div>
-      </motion.div>
+      </Motion.div>
     </div>
   );
 });
@@ -179,7 +213,7 @@ const LoveCounter = memo(() => {
       : "max-w-4xl";
 
   return (
-    <motion.div
+    <Motion.div
       variants={containerVariants}
       initial="initial"
       animate="animate"
@@ -191,7 +225,7 @@ const LoveCounter = memo(() => {
       >
         <div className="absolute inset-0 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-red-500/10 animate-pulse" />
 
-        <motion.div
+        <Motion.div
           animate={heartAnimation}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
           className="relative z-10"
@@ -204,7 +238,7 @@ const LoveCounter = memo(() => {
           <div
             className={`grid ${gridCols} gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6`}
           >
-            {timeUnits.map((unit, index) => (
+            {timeUnits.map((unit) => (
               <div
                 key={unit.label}
                 className={`${unit.bgColor} rounded-lg sm:rounded-xl p-2 sm:p-3 lg:p-4 border ${unit.borderColor}`}
@@ -232,15 +266,22 @@ const LoveCounter = memo(() => {
           <p className="text-sm sm:text-base lg:text-lg text-pink-300 font-medium">
             {LOVE_MESSAGES.COUNTER_SUBTITLE}
           </p>
-        </motion.div>
+        </Motion.div>
       </div>
-    </motion.div>
+    </Motion.div>
   );
 });
 
 LoveCounter.displayName = "LoveCounter";
 
 const HomePage = memo(() => {
+  const thoughtForToday = useMemo(() => {
+    const dayKey = toLocalDayKey();
+    const thoughtIndex =
+      hashText(`${dayKey}-home-thought`) % DAILY_THOUGHTS.length;
+    return DAILY_THOUGHTS[thoughtIndex];
+  }, []);
+
   const features = [
     {
       icon: Heart,
@@ -265,13 +306,13 @@ const HomePage = memo(() => {
       <FloatingBalloons />
 
       {/* Hero Section */}
-      <motion.div
+      <Motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="text-center space-y-6 sm:space-y-8"
       >
-        <motion.h1
+        <Motion.h1
           className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-bold text-white mb-4 sm:mb-6 leading-tight"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -286,9 +327,9 @@ const HomePage = memo(() => {
           >
             Beautiful Universe ♡
           </span>
-        </motion.h1>
+        </Motion.h1>
 
-        <motion.p
+        <Motion.p
           className="text-base sm:text-lg md:text-xl lg:text-2xl text-pink-100/90 max-w-xs sm:max-w-2xl lg:max-w-3xl mx-auto leading-relaxed px-4"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -300,10 +341,10 @@ const HomePage = memo(() => {
           You are my star, my moon, my entire galaxy. I wanted to create
           something as beautiful and infinite as my love for you. Forever and
           always, my darling! ♡
-        </motion.p>
+        </Motion.p>
 
         {/* Love anniversary message */}
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1.2, duration: 1 }}
@@ -312,64 +353,80 @@ const HomePage = memo(() => {
           <span className="text-pink-300/80 text-sm sm:text-base lg:text-lg italic">
             ✨ From the day you said yes (29th Nov 2022) to forever ✨
           </span>
-        </motion.div>
+        </Motion.div>
 
-        <motion.div
-          className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center pt-4 sm:pt-6"
+        <Motion.div
+          className="space-y-3 sm:space-y-4 pt-4 sm:pt-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6, duration: 0.8 }}
         >
-          <motion.button
-            whileHover={{
-              scale: 1.05,
-              boxShadow:
-                "0 20px 40px rgba(34, 211, 238, 0.4), 0 0 60px rgba(168, 85, 247, 0.3)",
-            }}
-            whileTap={{ scale: 0.95 }}
-            className="group px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-cyan-500 via-purple-500 to-violet-600 text-white font-semibold rounded-full hover:from-cyan-400 hover:via-purple-400 hover:to-violet-500 transition-all duration-300 shadow-lg shadow-purple-500/25 border border-cyan-400/30 flex items-center space-x-2 w-full sm:w-auto justify-center touch-manipulation"
-            style={{
-              background: "linear-gradient(45deg, #06b6d4, #8b5cf6, #7c3aed)",
-              boxShadow:
-                "0 8px 32px rgba(34, 211, 238, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-            }}
+          <Motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.45, duration: 0.6 }}
+            className="w-full max-w-3xl mb-2 px-5 py-4 rounded-2xl border border-cyan-400/30 bg-cyan-900/10 backdrop-blur-md"
           >
-            <span className="text-sm sm:text-base">Launch Journey</span>
-            <Rocket
-              size={16}
-              className="sm:w-[18px] sm:h-[18px] group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform"
-            />
-          </motion.button>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/80 mb-1">
+              Thought For Today
+            </p>
+            <p className="text-sm sm:text-base text-cyan-100/95 leading-relaxed">
+              "{thoughtForToday}"
+            </p>
+          </Motion.div>
 
-          <motion.button
-            whileHover={{
-              scale: 1.05,
-              boxShadow: "0 0 30px rgba(34, 211, 238, 0.3)",
-            }}
-            whileTap={{ scale: 0.95 }}
-            className="px-6 sm:px-8 py-3 sm:py-4 border-2 border-cyan-400/40 text-cyan-100 font-semibold rounded-full hover:bg-cyan-500/10 hover:border-cyan-300/60 transition-all duration-300 backdrop-blur-sm w-full sm:w-auto text-sm sm:text-base touch-manipulation"
-            style={{
-              background: "rgba(34, 211, 238, 0.05)",
-              boxShadow: "inset 0 1px 0 rgba(34, 211, 238, 0.2)",
-            }}
-          >
-            Explore Galaxy
-          </motion.button>
-        </motion.div>
-      </motion.div>
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
+            <Motion.button
+              whileHover={{
+                scale: 1.05,
+                boxShadow:
+                  "0 20px 40px rgba(34, 211, 238, 0.4), 0 0 60px rgba(168, 85, 247, 0.3)",
+              }}
+              whileTap={{ scale: 0.95 }}
+              className="group px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-cyan-500 via-purple-500 to-violet-600 text-white font-semibold rounded-full hover:from-cyan-400 hover:via-purple-400 hover:to-violet-500 transition-all duration-300 shadow-lg shadow-purple-500/25 border border-cyan-400/30 flex items-center space-x-2 w-full sm:w-auto justify-center touch-manipulation"
+              style={{
+                background: "linear-gradient(45deg, #06b6d4, #8b5cf6, #7c3aed)",
+                boxShadow:
+                  "0 8px 32px rgba(34, 211, 238, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
+              }}
+            >
+              <span className="text-sm sm:text-base">Launch Journey</span>
+              <Rocket
+                size={16}
+                className="sm:w-[18px] sm:h-[18px] group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform"
+              />
+            </Motion.button>
+
+            <Motion.button
+              whileHover={{
+                scale: 1.05,
+                boxShadow: "0 0 30px rgba(34, 211, 238, 0.3)",
+              }}
+              whileTap={{ scale: 0.95 }}
+              className="px-6 sm:px-8 py-3 sm:py-4 border-2 border-cyan-400/40 text-cyan-100 font-semibold rounded-full hover:bg-cyan-500/10 hover:border-cyan-300/60 transition-all duration-300 backdrop-blur-sm w-full sm:w-auto text-sm sm:text-base touch-manipulation"
+              style={{
+                background: "rgba(34, 211, 238, 0.05)",
+                boxShadow: "inset 0 1px 0 rgba(34, 211, 238, 0.2)",
+              }}
+            >
+              Explore Galaxy
+            </Motion.button>
+          </div>
+        </Motion.div>
+      </Motion.div>
 
       {/* Love Counter */}
       <LoveCounter />
 
       {/* Features Grid */}
-      <motion.div
+      <Motion.div
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8"
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8, duration: 0.8 }}
       >
         {features.map((feature, index) => (
-          <motion.div
+          <Motion.div
             key={index}
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -386,7 +443,7 @@ const HomePage = memo(() => {
                 "inset 0 1px 0 rgba(255,255,255,0.1), 0 8px 32px rgba(34, 211, 238, 0.1)",
             }}
           >
-            <motion.div
+            <Motion.div
               whileHover={{ rotate: 360, scale: 1.1 }}
               transition={{ duration: 0.6 }}
               className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 bg-gradient-to-r from-cyan-400 via-purple-500 to-violet-600 rounded-full mb-4 sm:mb-6 shadow-lg shadow-purple-500/40"
@@ -400,19 +457,19 @@ const HomePage = memo(() => {
                 size={20}
                 className="sm:w-6 sm:h-6 lg:w-6 lg:h-6 text-white drop-shadow-lg"
               />
-            </motion.div>
+            </Motion.div>
             <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold text-white mb-3 sm:mb-4 group-hover:text-cyan-300 transition-colors">
               {feature.title}
             </h3>
             <p className="text-sm sm:text-base text-cyan-100/80 leading-relaxed">
               {feature.desc}
             </p>
-          </motion.div>
+          </Motion.div>
         ))}
-      </motion.div>
+      </Motion.div>
 
       {/* Stats Section */}
-      <motion.div
+      <Motion.div
         className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 text-center"
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
@@ -424,7 +481,7 @@ const HomePage = memo(() => {
           { number: "♡∞", label: "Kisses & Hugs" },
           { number: "Forever", label: "Together" },
         ].map((stat, index) => (
-          <motion.div
+          <Motion.div
             key={index}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -436,7 +493,7 @@ const HomePage = memo(() => {
             }}
             className="space-y-1 sm:space-y-2"
           >
-            <motion.div
+            <Motion.div
               className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-pink-400 via-red-400 to-purple-400 bg-clip-text text-transparent drop-shadow-lg"
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -445,13 +502,13 @@ const HomePage = memo(() => {
               }}
             >
               {stat.number}
-            </motion.div>
+            </Motion.div>
             <div className="text-cyan-200/80 font-medium tracking-wide text-xs sm:text-sm lg:text-base">
               {stat.label}
             </div>
-          </motion.div>
+          </Motion.div>
         ))}
-      </motion.div>
+      </Motion.div>
     </div>
   );
 });

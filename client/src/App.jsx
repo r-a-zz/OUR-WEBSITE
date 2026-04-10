@@ -5,7 +5,15 @@ import {
   MotionConfig,
   useReducedMotion,
 } from "framer-motion";
-import { Home, Info, Layers, Briefcase, FileText, Mail } from "lucide-react";
+import {
+  Home,
+  Info,
+  Layers,
+  Briefcase,
+  FileText,
+  CalendarDays,
+  ShoppingBag,
+} from "lucide-react";
 
 // Context and Hooks
 import { AppProvider, useApp } from "./context/AppContext";
@@ -21,35 +29,76 @@ import SEO from "./components/SEO";
 
 // Lazy load pages for better performance
 const loadHomePage = () => import("./components/Pages/HomePage");
+const loadDailyHubPage = () => import("./components/Pages/DailyHubPage");
+const loadShoppingComparePage = () =>
+  import("./components/Pages/ShoppingComparePage");
 const loadAboutPage = () => import("./components/Pages/AboutPage");
 const loadServicesPage = () => import("./components/Pages/ServicesPage");
 const loadPortfolioPage = () => import("./components/Pages/PortfolioPage");
 const loadLoveNotesPage = () => import("./components/Pages/LoveNotesPage");
-const loadContactPage = () => import("./components/Pages/ContactPage");
 
 const HomePage = lazy(loadHomePage);
+const DailyHubPage = lazy(loadDailyHubPage);
+const ShoppingComparePage = lazy(loadShoppingComparePage);
 const AboutPage = lazy(loadAboutPage);
 const ServicesPage = lazy(loadServicesPage);
 const PortfolioPage = lazy(loadPortfolioPage);
 const LoveNotesPage = lazy(loadLoveNotesPage);
-const ContactPage = lazy(loadContactPage);
 
 const PAGE_PRELOADERS = [
   loadHomePage,
+  loadDailyHubPage,
+  loadShoppingComparePage,
   loadAboutPage,
   loadServicesPage,
   loadPortfolioPage,
   loadLoveNotesPage,
-  loadContactPage,
 ];
 
 const NAV_ITEMS = [
-  { id: "home", label: "♡ Our Love", icon: Home },
-  { id: "services", label: "♡ Our Dreams", icon: Layers },
-  { id: "blog", label: "♡ Love Notes", icon: FileText },
-  { id: "about", label: "♡ About Us", icon: Info },
-  { id: "portfolio", label: "♡ Memories", icon: Briefcase },
-  { id: "contact", label: "♡ Forever", icon: Mail },
+  {
+    id: "home",
+    label: "Home",
+    description: "Our highlights and love counter",
+    icon: Home,
+  },
+  {
+    id: "daily",
+    label: "Daily Hub",
+    description: "Todo, calendar, and daily thought",
+    icon: CalendarDays,
+    badge: "NEW",
+  },
+  {
+    id: "shopping",
+    label: "Shopping Compare",
+    description: "Typo-tolerant search with filters and price range",
+    icon: ShoppingBag,
+  },
+  {
+    id: "services",
+    label: "Dreams & Tools",
+    description: "Fun websites and useful discoveries",
+    icon: Layers,
+  },
+  {
+    id: "blog",
+    label: "Love Notes",
+    description: "Journal and private memories",
+    icon: FileText,
+  },
+  {
+    id: "portfolio",
+    label: "Memories",
+    description: "Our moments and snapshots",
+    icon: Briefcase,
+  },
+  {
+    id: "about",
+    label: "About Us",
+    description: "Our story and journey",
+    icon: Info,
+  },
 ];
 
 const SEO_DATA = {
@@ -59,6 +108,20 @@ const SEO_DATA = {
       "Experience the future of web design with stunning visuals, seamless interactions, and cutting-edge technology.",
     keywords:
       "web development, modern design, react, user experience, digital solutions",
+  },
+  daily: {
+    title: "Daily Hub - Everyday Planner, Shopping Helper, and Inspiration",
+    description:
+      "A personalized daily space with todo list, calendar, thought of the day, and smart shopping comparison links.",
+    keywords:
+      "daily planner, to do list, calendar, shopping comparison, pinterest links, thought of the day",
+  },
+  shopping: {
+    title: "Shopping Compare - Smart Product Search and Price Filters",
+    description:
+      "Compare products with typo-tolerant search, price ranges, category and brand filters, and marketplace links.",
+    keywords:
+      "shopping compare, product search, price comparison, typo tolerant search, ecommerce filters",
   },
   about: {
     title: "About Us - Our Amazing Website",
@@ -86,22 +149,16 @@ const SEO_DATA = {
     keywords:
       "love notes, diary, memories, relationship, digital journal, love story",
   },
-  contact: {
-    title: "Contact Us - Get In Touch",
-    description:
-      "Ready to start your project? Contact our team for professional web development and design services.",
-    keywords:
-      "contact, get in touch, web development services, consultation, hire developers",
-  },
 };
 
 const PAGE_COMPONENTS = {
   home: HomePage,
+  daily: DailyHubPage,
+  shopping: ShoppingComparePage,
   about: AboutPage,
   services: ServicesPage,
   portfolio: PortfolioPage,
   blog: LoveNotesPage,
-  contact: ContactPage,
 };
 
 const PAGE_VARIANTS = {
@@ -157,6 +214,11 @@ const AppContent = () => {
     () => SEO_DATA[activeSection] || SEO_DATA.home,
     [activeSection],
   );
+
+  const currentSectionLabel = useMemo(() => {
+    const activeItem = NAV_ITEMS.find((item) => item.id === activeSection);
+    return activeItem?.label || "Home";
+  }, [activeSection]);
 
   const pageVariants = useMemo(
     () => (prefersReducedMotion ? REDUCED_PAGE_VARIANTS : PAGE_VARIANTS),
@@ -249,6 +311,7 @@ const AppContent = () => {
           <Header
             onToggleSidebar={toggleSidebar}
             currentSection={activeSection}
+            currentSectionLabel={currentSectionLabel}
             isSidebarOpen={sidebarOpen}
           />
 
