@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Play,
   Search,
@@ -20,10 +21,7 @@ import youtubeService from "../../services/youtubeService";
 export default function YouTubeMusicCard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
 
@@ -84,47 +82,55 @@ export default function YouTubeMusicCard() {
     [],
   );
 
+  const {
+    data: searchData,
+    error: searchError,
+    isFetching,
+    isFetched,
+    refetch,
+  } = useQuery({
+    queryKey: ["youtube-search", submittedQuery],
+    queryFn: () => youtubeService.searchVideos(submittedQuery, 12, "video"),
+    enabled: isModalOpen && Boolean(submittedQuery),
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 30,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+
+  const searchResults = searchData?.items || [];
+
+  const notice =
+    searchData?.source === "demo_data"
+      ? `Demo Mode: ${
+          searchData?.note ||
+          "Using sample videos because YouTube API is unavailable."
+        }`
+      : "";
+
+  const errorMessage =
+    searchError?.message ||
+    (isFetched && submittedQuery && searchResults.length === 0
+      ? "No videos found. Try different keywords."
+      : "");
+
   // Search YouTube videos
   const handleSearch = useCallback(
-    async (e) => {
+    (e) => {
       e.preventDefault();
-      if (!searchQuery.trim()) return;
-
-      setLoading(true);
-      setError("");
-      setNotice("");
-      setSearchResults([]);
-
-      try {
-        const result = await youtubeService.searchVideos(
-          searchQuery,
-          12,
-          "video",
-        );
-        setSearchResults(result.items || []);
-
-        if (!result.items || result.items.length === 0) {
-          setError("No videos found. Try different keywords.");
-        }
-
-        if (result.source === "demo_data") {
-          setNotice(
-            `Demo Mode: ${
-              result.note ||
-              "Using sample videos because YouTube API is unavailable."
-            }`,
-          );
-        }
-      } catch (err) {
-        setError(
-          err?.message ||
-            "Failed to search videos. Please check the server and try again.",
-        );
-      } finally {
-        setLoading(false);
+      const term = searchQuery.trim();
+      if (!term) {
+        return;
       }
+
+      if (term === submittedQuery) {
+        void refetch();
+        return;
+      }
+
+      setSubmittedQuery(term);
     },
-    [searchQuery],
+    [searchQuery, submittedQuery, refetch],
   );
 
   // Open video player
@@ -137,9 +143,7 @@ export default function YouTubeMusicCard() {
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setSearchQuery("");
-    setSearchResults([]);
-    setError("");
-    setNotice("");
+    setSubmittedQuery("");
   }, []);
 
   // Close video player
@@ -247,10 +251,10 @@ export default function YouTubeMusicCard() {
                   </div>
                   <button
                     type="submit"
-                    disabled={!searchQuery.trim() || loading}
+                    disabled={!searchQuery.trim() || isFetching}
                     className="px-6 py-4 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors flex items-center gap-2"
                   >
-                    {loading ? (
+                    {isFetching ? (
                       <>
                         <Loader size={18} className="animate-spin" />
                         Searching...
@@ -267,9 +271,9 @@ export default function YouTubeMusicCard() {
 
               {/* Modal Content */}
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-                {error && (
+                {errorMessage && (
                   <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl">
-                    <p className="text-red-300">{error}</p>
+                    <p className="text-red-300">{errorMessage}</p>
                   </div>
                 )}
 
@@ -333,10 +337,10 @@ export default function YouTubeMusicCard() {
                   </div>
                 )}
 
-                {!loading &&
-                  !error &&
+                {!isFetching &&
+                  !errorMessage &&
                   searchResults.length === 0 &&
-                  searchQuery && (
+                  submittedQuery && (
                     <div className="text-center py-12">
                       <Music size={48} className="text-white/30 mx-auto mb-4" />
                       <p className="text-white/60">

@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const axios = require("axios");
 require("dotenv").config();
 
@@ -13,6 +14,22 @@ const REQUEST_TIMEOUT_MS = Number.parseInt(
   10,
 );
 const CORS_ORIGIN = (process.env.CORS_ORIGIN || "*").trim();
+const CACHE_MAX_ENTRIES = Number.parseInt(
+  process.env.API_CACHE_MAX_ENTRIES || "250",
+  10,
+);
+const SEARCH_CACHE_TTL_MS = Number.parseInt(
+  process.env.API_CACHE_SEARCH_TTL_MS || "120000",
+  10,
+);
+const VIDEO_CACHE_TTL_MS = Number.parseInt(
+  process.env.API_CACHE_VIDEO_TTL_MS || "600000",
+  10,
+);
+const TRENDING_CACHE_TTL_MS = Number.parseInt(
+  process.env.API_CACHE_TRENDING_TTL_MS || "180000",
+  10,
+);
 
 const resolveCorsOrigin = () => {
   if (!CORS_ORIGIN || CORS_ORIGIN === "*") {
@@ -30,6 +47,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(compression());
 app.use(express.json());
 
 const youtubeClient = axios.create({
@@ -63,6 +81,39 @@ const createError = (error, meta = {}) => ({
   error,
   ...meta,
 });
+
+const apiResponseCache = new Map();
+
+const getCachedResponse = (cacheKey) => {
+  const cached = apiResponseCache.get(cacheKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    apiResponseCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.payload;
+};
+
+const setCachedResponse = (cacheKey, payload, ttlMs) => {
+  const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : SEARCH_CACHE_TTL_MS;
+
+  if (apiResponseCache.size >= CACHE_MAX_ENTRIES) {
+    const oldestCacheKey = apiResponseCache.keys().next().value;
+    if (oldestCacheKey) {
+      apiResponseCache.delete(oldestCacheKey);
+    }
+  }
+
+  apiResponseCache.set(cacheKey, {
+    payload,
+    expiresAt: Date.now() + ttl,
+  });
+};
 
 const parseDuration = (duration) => {
   if (!duration) return "";
@@ -332,16 +383,23 @@ app.get("/api/youtube/search", async (req, res) => {
       .json(createError("Search query is required", { field: "q" }));
   }
 
+  const cacheKey = `search:${query.toLowerCase()}:${maxResults}:${type}`;
+  const cachedResponse = getCachedResponse(cacheKey);
+  if (cachedResponse) {
+    return res.set("X-Cache", "HIT").json(cachedResponse);
+  }
+
   if (!YOUTUBE_API_KEY) {
     const demoResults = getDemoSearchResults(query, maxResults);
-    return res.json(
-      createSuccess(demoResults, {
-        totalResults: demoResults.length,
-        resultsPerPage: demoResults.length,
-        source: "demo_data",
-        note: "Set YOUTUBE_API_KEY to enable live YouTube search.",
-      }),
-    );
+    const payload = createSuccess(demoResults, {
+      totalResults: demoResults.length,
+      resultsPerPage: demoResults.length,
+      source: "demo_data",
+      note: "Set YOUTUBE_API_KEY to enable live YouTube search.",
+    });
+
+    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   }
 
   try {
@@ -359,26 +417,28 @@ app.get("/api/youtube/search", async (req, res) => {
 
     const formattedResults = formatSearchResults(response.data.items || []);
 
-    return res.json(
-      createSuccess(formattedResults, {
-        totalResults: response.data.pageInfo?.totalResults || 0,
-        resultsPerPage: response.data.pageInfo?.resultsPerPage || 0,
-        source: "youtube_api",
-      }),
-    );
+    const payload = createSuccess(formattedResults, {
+      totalResults: response.data.pageInfo?.totalResults || 0,
+      resultsPerPage: response.data.pageInfo?.resultsPerPage || 0,
+      source: "youtube_api",
+    });
+
+    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     const fallbackResults = getDemoSearchResults(query, maxResults);
 
-    return res.json(
-      createSuccess(fallbackResults, {
-        totalResults: fallbackResults.length,
-        resultsPerPage: fallbackResults.length,
-        source: "demo_data",
-        note:
-          error.response?.data?.error?.message ||
-          "YouTube API unavailable. Returned demo data.",
-      }),
-    );
+    const payload = createSuccess(fallbackResults, {
+      totalResults: fallbackResults.length,
+      resultsPerPage: fallbackResults.length,
+      source: "demo_data",
+      note:
+        error.response?.data?.error?.message ||
+        "YouTube API unavailable. Returned demo data.",
+    });
+
+    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   }
 });
 
@@ -391,6 +451,12 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
       .json(createError("Video ID is required", { field: "videoId" }));
   }
 
+  const cacheKey = `video:${videoId}`;
+  const cachedResponse = getCachedResponse(cacheKey);
+  if (cachedResponse) {
+    return res.set("X-Cache", "HIT").json(cachedResponse);
+  }
+
   if (!YOUTUBE_API_KEY) {
     const fallback = mockYouTubeData.find((video) => video.id === videoId);
 
@@ -398,9 +464,12 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
       return res.status(404).json(createError("Video not found"));
     }
 
-    return res.json(
-      createSuccess(withComputedVideoFields(fallback), { source: "demo_data" }),
-    );
+    const payload = createSuccess(withComputedVideoFields(fallback), {
+      source: "demo_data",
+    });
+
+    setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   }
 
   try {
@@ -418,13 +487,14 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
 
     const videoDetails = formatVideoDetails(response.data.items[0]);
 
-    return res.json(
-      createSuccess({
-        ...videoDetails,
-        formattedDuration: parseDuration(videoDetails.duration),
-        formattedViewCount: formatViewCount(videoDetails.viewCount),
-      }),
-    );
+    const payload = createSuccess({
+      ...videoDetails,
+      formattedDuration: parseDuration(videoDetails.duration),
+      formattedViewCount: formatViewCount(videoDetails.viewCount),
+    });
+
+    setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     if (error.response?.status === 403) {
       return res
@@ -445,18 +515,25 @@ app.get("/api/youtube/trending", async (req, res) => {
   const categoryId = req.query.categoryId;
   const regionCode = String(req.query.regionCode || "US");
 
+  const cacheKey = `trending:${maxResults}:${categoryId || "all"}:${regionCode}`;
+  const cachedResponse = getCachedResponse(cacheKey);
+  if (cachedResponse) {
+    return res.set("X-Cache", "HIT").json(cachedResponse);
+  }
+
   if (!YOUTUBE_API_KEY) {
     const fallback = mockYouTubeData
       .slice(0, maxResults)
       .map(withComputedVideoFields);
 
-    return res.json(
-      createSuccess(fallback, {
-        totalResults: fallback.length,
-        source: "demo_data",
-        note: "Set YOUTUBE_API_KEY to enable live trending videos.",
-      }),
-    );
+    const payload = createSuccess(fallback, {
+      totalResults: fallback.length,
+      source: "demo_data",
+      note: "Set YOUTUBE_API_KEY to enable live trending videos.",
+    });
+
+    setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   }
 
   try {
@@ -483,13 +560,14 @@ app.get("/api/youtube/trending", async (req, res) => {
       };
     });
 
-    return res.json(
-      createSuccess(formattedResults, {
-        totalResults:
-          response.data.pageInfo?.totalResults || formattedResults.length,
-        source: "youtube_api",
-      }),
-    );
+    const payload = createSuccess(formattedResults, {
+      totalResults:
+        response.data.pageInfo?.totalResults || formattedResults.length,
+      source: "youtube_api",
+    });
+
+    setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    return res.set("X-Cache", "MISS").json(payload);
   } catch (_error) {
     return res.status(500).json(createError("Failed to get trending videos"));
   }
