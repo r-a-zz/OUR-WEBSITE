@@ -1,76 +1,223 @@
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Smartphone, Palette, Zap, Shield, Headphones } from "lucide-react";
+import {
+  Search,
+  ExternalLink,
+  Shuffle,
+  Heart,
+  Sparkles,
+  Gamepad2,
+  Music,
+  Globe,
+  Wrench,
+  Brain,
+} from "lucide-react";
 import YouTubeMusicCard from "../UI/YouTubeMusicCard.jsx";
 
+const FAVORITES_STORAGE_KEY = "our-dreams-favorite-websites";
+
+const DREAM_WEBSITES = [
+  {
+    id: "sandspiel",
+    name: "Sandspiel",
+    url: "https://sandspiel.club/",
+    purpose: "Creative sandbox website",
+    category: "creative",
+  },
+  {
+    id: "patatap",
+    name: "Patatap",
+    url: "https://patatap.com/",
+    purpose: "Create random audiovisual sounds with your keyboard",
+    category: "music",
+  },
+  {
+    id: "emu-os",
+    name: "EmuOS",
+    url: "https://emupedia.net/beta/emuos/",
+    purpose: "Free and legal old-school browser game experience",
+    category: "games",
+  },
+  {
+    id: "classic-minecraft",
+    name: "Classic Minecraft",
+    url: "https://classic.minecraft.net/",
+    purpose: "Play classic Minecraft in browser",
+    category: "games",
+  },
+  {
+    id: "online-sequencer",
+    name: "Online Sequencer",
+    url: "https://onlinesequencer.net/",
+    purpose: "Create your own audio tracks online",
+    category: "music",
+  },
+  {
+    id: "venge",
+    name: "Venge",
+    url: "https://venge.io/",
+    purpose: "Free multiplayer shooter game",
+    category: "games",
+  },
+  {
+    id: "slither",
+    name: "Slither",
+    url: "https://slither.io/",
+    purpose: "Fun classic snake-style multiplayer game",
+    category: "games",
+  },
+  {
+    id: "playback-fm",
+    name: "Playback.fm",
+    url: "https://playback.fm/",
+    purpose: "Find the #1 song on the day you were born",
+    category: "music",
+  },
+  {
+    id: "draw-a-stickman",
+    name: "Draw a Stickman",
+    url: "https://drawastickman.com/",
+    purpose: "Interactive stickman drawing game",
+    category: "creative",
+  },
+  {
+    id: "virtual-vacation",
+    name: "Virtual Vacation",
+    url: "https://virtualvacation.us/",
+    purpose: "Guess cities and countries with friends",
+    category: "explore",
+  },
+  {
+    id: "freddie-meter",
+    name: "Freddie Meter",
+    url: "https://freddiemeter.withyoutube.com/",
+    purpose: "Check how much your voice resembles Freddie Mercury",
+    category: "music",
+  },
+  {
+    id: "personality-assessor",
+    name: "Personality Assessor",
+    url: "https://www.personalityassessor.com/",
+    purpose: "Discover your personality profile",
+    category: "mind",
+  },
+  {
+    id: "geo-fs",
+    name: "GeoFS",
+    url: "https://www.geo-fs.com/",
+    purpose: "Fly planes around the world in-browser",
+    category: "explore",
+  },
+  {
+    id: "hypnogram",
+    name: "Hypnogram",
+    url: "https://hypnogram.xyz/",
+    purpose: "Generate AI images",
+    category: "creative",
+  },
+  {
+    id: "bored-humans",
+    name: "Bored Humans",
+    url: "https://boredhumans.com/",
+    purpose: "Large collection of fun and weird tools",
+    category: "utility",
+  },
+  {
+    id: "slowroads",
+    name: "Slowroads",
+    url: "https://slowroads.io/",
+    purpose: "Relaxing endless driving simulation",
+    category: "games",
+  },
+  {
+    id: "voice-ai",
+    name: "Voice.ai",
+    url: "https://voice.ai/",
+    purpose: "Voice modulation and creative audio effects",
+    category: "music",
+  },
+  {
+    id: "radio-garden",
+    name: "Radio Garden",
+    url: "https://radio.garden/",
+    purpose: "Listen to radio stations from around the world",
+    category: "explore",
+  },
+];
+
+const CATEGORY_CONFIG = {
+  all: { label: "All", icon: Sparkles },
+  games: { label: "Games", icon: Gamepad2 },
+  music: { label: "Music", icon: Music },
+  creative: { label: "Creative", icon: Sparkles },
+  explore: { label: "Explore", icon: Globe },
+  utility: { label: "Useful", icon: Wrench },
+  mind: { label: "Mind", icon: Brain },
+};
+
 const ServicesPage = () => {
-  const services = [
-    {
-      icon: Palette,
-      title: "UI/UX Design",
-      description:
-        "Beautiful and intuitive user interfaces that enhance user experience.",
-      features: [
-        "User Research",
-        "Wireframing",
-        "Prototyping",
-        "Visual Design",
-      ],
-      color: "from-purple-500 to-pink-500",
-    },
-    {
-      icon: Smartphone,
-      title: "Mobile Apps",
-      description:
-        "Native and cross-platform mobile applications for iOS and Android.",
-      features: [
-        "React Native",
-        "Flutter",
-        "iOS Development",
-        "Android Development",
-      ],
-      color: "from-green-500 to-teal-500",
-    },
-    {
-      icon: Zap,
-      title: "Performance Optimization",
-      description:
-        "Speed up your website and improve user engagement with our optimization services.",
-      features: [
-        "Core Web Vitals",
-        "Bundle Analysis",
-        "CDN Setup",
-        "Caching Strategies",
-      ],
-      color: "from-yellow-500 to-orange-500",
-    },
-    {
-      icon: Shield,
-      title: "Security Audits",
-      description:
-        "Comprehensive security assessments to protect your digital assets.",
-      features: [
-        "Vulnerability Testing",
-        "Code Review",
-        "Security Protocols",
-        "Compliance",
-      ],
-      color: "from-red-500 to-pink-500",
-    },
-    {
-      icon: Headphones,
-      title: "Consulting",
-      description:
-        "Strategic technology consulting to help your business grow and succeed.",
-      features: [
-        "Architecture Review",
-        "Tech Stack Selection",
-        "Team Training",
-        "Best Practices",
-      ],
-      color: "from-indigo-500 to-purple-500",
-    },
-  ];
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [favorites, setFavorites] = useState([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setFavorites(parsed);
+      }
+    } catch {
+      setFavorites([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+  }, [favorites]);
+
+  const categories = useMemo(() => {
+    const unique = new Set(DREAM_WEBSITES.map((site) => site.category));
+    return ["all", ...Array.from(unique)];
+  }, []);
+
+  const filteredWebsites = useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+
+    return DREAM_WEBSITES.filter((site) => {
+      const categoryMatch =
+        activeCategory === "all" || site.category === activeCategory;
+
+      const searchMatch =
+        normalized.length === 0 ||
+        site.name.toLowerCase().includes(normalized) ||
+        site.purpose.toLowerCase().includes(normalized);
+
+      return categoryMatch && searchMatch;
+    });
+  }, [activeCategory, searchTerm]);
+
+  const toggleFavorite = useCallback((siteId) => {
+    setFavorites((current) =>
+      current.includes(siteId)
+        ? current.filter((id) => id !== siteId)
+        : [...current, siteId],
+    );
+  }, []);
+
+  const openRandomWebsite = useCallback(() => {
+    if (filteredWebsites.length === 0) {
+      return;
+    }
+
+    const randomSite =
+      filteredWebsites[Math.floor(Math.random() * filteredWebsites.length)];
+    window.open(randomSite.url, "_blank", "noopener,noreferrer");
+  }, [filteredWebsites]);
 
   return (
     <div className="space-y-16">
@@ -87,7 +234,7 @@ const ServicesPage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.8 }}
         >
-          Our Services
+          Our Dreams Hub
         </motion.h1>
         <motion.p
           className="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed"
@@ -95,10 +242,73 @@ const ServicesPage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.8 }}
         >
-          We offer comprehensive digital solutions to help your business thrive
-          in the modern world. From concept to deployment, we've got you
-          covered.
+          A handpicked collection of cool websites for fun, music, creativity,
+          and daily life hacks. Save your favorites and hit random when you are
+          bored.
         </motion.p>
+      </motion.div>
+
+      {/* Controls */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.6 }}
+        className="space-y-5"
+      >
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60"
+              size={18}
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search websites by name or purpose..."
+              className="w-full bg-white/10 border border-white/20 rounded-2xl py-3 pl-11 pr-4 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400/40"
+            />
+          </div>
+
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={openRandomWebsite}
+            disabled={filteredWebsites.length === 0}
+            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Shuffle size={18} />
+            Surprise Me
+          </motion.button>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          {categories.map((category) => {
+            const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.all;
+            const Icon = config.icon;
+
+            return (
+              <motion.button
+                key={category}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setActiveCategory(category)}
+                className={`px-4 py-2 rounded-full text-sm font-medium border transition-all duration-300 flex items-center gap-2 ${
+                  activeCategory === category
+                    ? "bg-purple-500/30 border-purple-300/50 text-white"
+                    : "bg-white/10 border-white/20 text-white/75 hover:bg-white/15"
+                }`}
+              >
+                <Icon size={14} />
+                {config.label}
+              </motion.button>
+            );
+          })}
+        </div>
+
+        <div className="text-white/60 text-sm">
+          Showing {filteredWebsites.length} websites • {favorites.length} saved
+        </div>
       </motion.div>
 
       {/* Services Grid */}
@@ -113,90 +323,90 @@ const ServicesPage = () => {
           <YouTubeMusicCard />
         </motion.div>
 
-        {/* Other Services */}
-        {services.map((service, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 + index * 0.1, duration: 0.8 }}
-            whileHover={{
-              y: -10,
-              transition: { type: "spring", stiffness: 300, damping: 10 },
-            }}
-            className="group bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 relative overflow-hidden"
-          >
-            {/* Animated background gradient */}
-            <motion.div
-              className={`absolute inset-0 bg-gradient-to-br ${service.color} opacity-0 group-hover:opacity-10 transition-opacity duration-500`}
-              initial={{ scale: 0, rotate: 180 }}
-              whileHover={{ scale: 1, rotate: 0 }}
-              transition={{ duration: 0.6 }}
-            />
+        {/* Curated Websites */}
+        {filteredWebsites.map((site, index) => {
+          const isFavorite = favorites.includes(site.id);
+          const categoryLabel =
+            CATEGORY_CONFIG[site.category]?.label || CATEGORY_CONFIG.all.label;
 
-            {/* Icon */}
+          return (
             <motion.div
-              whileHover={{ rotate: 360, scale: 1.1 }}
-              transition={{ duration: 0.6 }}
-              className={`inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r ${service.color} rounded-2xl mb-6 relative z-10`}
+              key={site.id}
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 + index * 0.1, duration: 0.8 }}
+              whileHover={{
+                y: -10,
+                transition: { type: "spring", stiffness: 300, damping: 10 },
+              }}
+              className="group bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/20 hover:bg-white/15 transition-all duration-300 relative overflow-hidden"
             >
-              <service.icon size={24} className="text-white" />
-            </motion.div>
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 via-purple-500/10 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                initial={{ scale: 0, rotate: 180 }}
+                whileHover={{ scale: 1, rotate: 0 }}
+                transition={{ duration: 0.6 }}
+              />
 
-            {/* Content */}
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-blue-300 transition-colors">
-                {service.title}
-              </h3>
-              <p className="text-white/80 leading-relaxed mb-6">
-                {service.description}
-              </p>
+              <div className="relative z-10">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <div className="inline-flex items-center rounded-full border border-white/30 px-3 py-1 text-xs text-white/80 mb-3">
+                      {categoryLabel}
+                    </div>
+                    <h3 className="text-2xl font-bold text-white group-hover:text-blue-300 transition-colors">
+                      {site.name}
+                    </h3>
+                  </div>
 
-              {/* Features */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-white/90 uppercase tracking-wide">
-                  What's Included:
-                </h4>
-                <ul className="space-y-2">
-                  {service.features.map((feature, featureIndex) => (
-                    <motion.li
-                      key={featureIndex}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{
-                        delay: 0.8 + index * 0.1 + featureIndex * 0.1,
-                      }}
-                      className="flex items-center space-x-3 text-white/70"
-                    >
-                      <motion.div
-                        className={`w-2 h-2 bg-gradient-to-r ${service.color} rounded-full`}
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          delay: featureIndex * 0.2,
-                        }}
-                      />
-                      <span className="text-sm">{feature}</span>
-                    </motion.li>
-                  ))}
-                </ul>
+                  <motion.button
+                    whileHover={{ scale: 1.12 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => toggleFavorite(site.id)}
+                    className={`rounded-full p-2 border ${
+                      isFavorite
+                        ? "bg-pink-500/25 border-pink-300/50 text-pink-200"
+                        : "bg-white/10 border-white/25 text-white/70"
+                    }`}
+                    aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                  >
+                    <Heart
+                      size={16}
+                      fill={isFavorite ? "currentColor" : "none"}
+                    />
+                  </motion.button>
+                </div>
+
+                <p className="text-white/80 leading-relaxed mb-6">
+                  {site.purpose}
+                </p>
+
+                <a
+                  href={site.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold hover:shadow-lg transition-all duration-300"
+                >
+                  Open Website
+                  <ExternalLink size={16} />
+                </a>
               </div>
-
-              {/* CTA */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`mt-8 w-full py-3 bg-gradient-to-r ${service.color} text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 opacity-90 hover:opacity-100`}
-              >
-                Learn More
-              </motion.button>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
 
-      {/* Process Section */}
+      {filteredWebsites.length === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center text-white/70 bg-white/5 border border-white/10 rounded-2xl p-8"
+        >
+          No websites matched your search. Try another keyword or category.
+        </motion.div>
+      )}
+
+      {/* Couple Workflow */}
       <motion.div
         className="bg-white/5 backdrop-blur-md rounded-3xl p-8 md:p-12 border border-white/10"
         initial={{ opacity: 0, y: 50 }}
@@ -204,29 +414,29 @@ const ServicesPage = () => {
         transition={{ delay: 1.4, duration: 0.8 }}
       >
         <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-12">
-          Our Process
+          How We Use This Hub Together
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {[
             {
               step: "01",
-              title: "Discovery",
-              desc: "We understand your needs and goals",
+              title: "Pick a Mood",
+              desc: "Choose category based on vibe: games, music, explore, or creative",
             },
             {
               step: "02",
-              title: "Planning",
-              desc: "We create a detailed project roadmap",
+              title: "Search Fast",
+              desc: "Use search to jump directly to what we need in seconds",
             },
             {
               step: "03",
-              title: "Development",
-              desc: "We build your solution with precision",
+              title: "Save Favorites",
+              desc: "Bookmark our best picks so we always come back to them",
             },
             {
               step: "04",
-              title: "Launch",
-              desc: "We deploy and provide ongoing support",
+              title: "Surprise Mode",
+              desc: "Use random pick when we are bored and want something new",
             },
           ].map((process, index) => (
             <motion.div
