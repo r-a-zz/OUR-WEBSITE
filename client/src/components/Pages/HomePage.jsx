@@ -170,13 +170,13 @@ const LoveCounter = memo(() => {
   const gridCols = isMobile
     ? "grid-cols-2"
     : isTablet
-    ? "grid-cols-3"
-    : "grid-cols-6";
+      ? "grid-cols-3"
+      : "grid-cols-6";
   const containerSize = isMobile
     ? "max-w-xs"
     : isTablet
-    ? "max-w-2xl"
-    : "max-w-4xl";
+      ? "max-w-2xl"
+      : "max-w-4xl";
 
   return (
     <motion.div
@@ -217,7 +217,7 @@ const LoveCounter = memo(() => {
                 <div
                   className={`${unit.textColor.replace(
                     "300",
-                    "400"
+                    "400",
                   )} text-xs sm:text-sm`}
                 >
                   {unit.label}
@@ -277,7 +277,7 @@ const HomePage = memo(() => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.4 }}
         >
-          Happy Birthday My
+          My Forever Love,
           <span
             className="block bg-gradient-to-r from-pink-400 via-red-400 to-purple-400 bg-clip-text text-transparent"
             style={{
@@ -297,9 +297,9 @@ const HomePage = memo(() => {
             textShadow: "0 0 20px rgba(244, 114, 182, 0.3)",
           }}
         >
-          You are my star, my moon, my entire galaxy. On your special day, I
-          wanted to create something as beautiful and infinite as my love for
-          you. Happy Birthday, my darling! ♡
+          You are my star, my moon, my entire galaxy. I wanted to create
+          something as beautiful and infinite as my love for you. Forever and
+          always, my darling! ♡
         </motion.p>
 
         {/* Love anniversary message */}
