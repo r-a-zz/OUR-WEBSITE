@@ -10,7 +10,8 @@ import {
   Eye,
   Clock,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
+import youtubeService from "../../services/youtubeService";
 
 /**
  * YouTube Music & Video Card Component
@@ -22,6 +23,7 @@ export default function YouTubeMusicCard() {
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
 
@@ -31,7 +33,7 @@ export default function YouTubeMusicCard() {
       idle: { scale: 1, rotateY: 0 },
       hover: { scale: 1.02, rotateY: 2 },
     }),
-    []
+    [],
   );
 
   const modalVariants = useMemo(
@@ -60,7 +62,7 @@ export default function YouTubeMusicCard() {
         },
       },
     }),
-    []
+    [],
   );
 
   const videoPlayerVariants = useMemo(
@@ -79,7 +81,7 @@ export default function YouTubeMusicCard() {
         },
       },
     }),
-    []
+    [],
   );
 
   // Search YouTube videos
@@ -90,46 +92,39 @@ export default function YouTubeMusicCard() {
 
       setLoading(true);
       setError("");
+      setNotice("");
       setSearchResults([]);
 
       try {
-        const response = await fetch(
-          `http://localhost:5000/api/youtube/search?q=${encodeURIComponent(
-            searchQuery
-          )}&maxResults=12`
+        const result = await youtubeService.searchVideos(
+          searchQuery,
+          12,
+          "video",
         );
+        setSearchResults(result.items || []);
 
-        if (!response.ok) {
-          throw new Error(`Search failed: ${response.status}`);
+        if (!result.items || result.items.length === 0) {
+          setError("No videos found. Try different keywords.");
         }
 
-        const data = await response.json();
-
-        if (data.success) {
-          setSearchResults(data.data || []);
-          if (data.data.length === 0) {
-            setError("No videos found. Try different keywords.");
-          }
-          // Show demo mode message if using fallback data
-          if (data.source === "demo_data") {
-            setError(
-              `Demo Mode: ${
-                data.note ||
-                "Using sample videos. Enable YouTube API for live search."
-              }`
-            );
-          }
-        } else {
-          setError(data.error || "Search failed");
+        if (result.source === "demo_data") {
+          setNotice(
+            `Demo Mode: ${
+              result.note ||
+              "Using sample videos because YouTube API is unavailable."
+            }`,
+          );
         }
       } catch (err) {
-        console.error("Search error:", err);
-        setError("Failed to search videos. Make sure the server is running.");
+        setError(
+          err?.message ||
+            "Failed to search videos. Please check the server and try again.",
+        );
       } finally {
         setLoading(false);
       }
     },
-    [searchQuery]
+    [searchQuery],
   );
 
   // Open video player
@@ -144,6 +139,7 @@ export default function YouTubeMusicCard() {
     setSearchQuery("");
     setSearchResults([]);
     setError("");
+    setNotice("");
   }, []);
 
   // Close video player
@@ -152,40 +148,10 @@ export default function YouTubeMusicCard() {
     setSelectedVideo(null);
   }, []);
 
-  // Format duration
-  const formatDuration = useCallback((duration) => {
-    if (!duration) return "";
-    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-    if (!match) return "";
-
-    const hours = parseInt(match[1]) || 0;
-    const minutes = parseInt(match[2]) || 0;
-    const seconds = parseInt(match[3]) || 0;
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-        .toString()
-        .padStart(2, "0")}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  }, []);
-
-  // Format view count
-  const formatViewCount = useCallback((viewCount) => {
-    if (!viewCount) return "0 views";
-    const count = parseInt(viewCount);
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M views`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K views`;
-    }
-    return `${count} views`;
-  }, []);
-
   return (
     <>
       {/* Main Card */}
-      <motion.div
+      <Motion.div
         variants={cardVariants}
         initial="idle"
         whileHover="hover"
@@ -216,19 +182,19 @@ export default function YouTubeMusicCard() {
           <Play size={16} />
           <span>Click to search & play</span>
         </div>
-      </motion.div>
+      </Motion.div>
 
       {/* Search Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             onClick={closeModal}
           >
-            <motion.div
+            <Motion.div
               variants={modalVariants}
               initial="hidden"
               animate="visible"
@@ -307,10 +273,16 @@ export default function YouTubeMusicCard() {
                   </div>
                 )}
 
+                {notice && (
+                  <div className="mb-6 p-4 bg-blue-500/20 border border-blue-500/30 rounded-xl">
+                    <p className="text-blue-200">{notice}</p>
+                  </div>
+                )}
+
                 {searchResults.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {searchResults.map((video) => (
-                      <motion.div
+                      <Motion.div
                         key={video.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -350,13 +322,13 @@ export default function YouTubeMusicCard() {
                               <Clock size={12} />
                               <span>
                                 {new Date(
-                                  video.publishedAt
+                                  video.publishedAt,
                                 ).toLocaleDateString()}
                               </span>
                             </div>
                           </div>
                         </div>
-                      </motion.div>
+                      </Motion.div>
                     ))}
                   </div>
                 )}
@@ -388,22 +360,22 @@ export default function YouTubeMusicCard() {
                   </div>
                 )}
               </div>
-            </motion.div>
-          </motion.div>
+            </Motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
 
       {/* Video Player Modal */}
       <AnimatePresence>
         {videoPlayerOpen && selectedVideo && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/90 backdrop-blur-sm z-60 flex items-center justify-center p-4"
             onClick={closeVideoPlayer}
           >
-            <motion.div
+            <Motion.div
               variants={videoPlayerVariants}
               initial="hidden"
               animate="visible"
@@ -451,8 +423,8 @@ export default function YouTubeMusicCard() {
                   frameBorder="0"
                 />
               </div>
-            </motion.div>
-          </motion.div>
+            </Motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </>

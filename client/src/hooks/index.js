@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export const useLocalStorage = (key, initialValue) => {
   const [storedValue, setStoredValue] = useState(() => {
     try {
+      if (typeof window === "undefined") {
+        return initialValue;
+      }
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
@@ -37,7 +40,13 @@ export const useMediaQuery = (query) => {
     if (typeof window === "undefined") return;
 
     const mediaQuery = window.matchMedia(query);
-    const handleChange = () => setMatches(mediaQuery.matches);
+    const handleChange = (event) => setMatches(event.matches);
+    setMatches(mediaQuery.matches);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
 
     mediaQuery.addListener(handleChange);
     return () => mediaQuery.removeListener(handleChange);
@@ -132,7 +141,7 @@ export const useWindowSize = () => {
 };
 
 export const useClickOutside = (handler) => {
-  const ref = useState(null);
+  const ref = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

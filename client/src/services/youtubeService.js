@@ -3,42 +3,136 @@
  * Handles all YouTube Data API v3 interactions
  */
 
-// In production the client should proxy requests to the server.
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 12000);
 
-const YOUTUBE_API_BASE_URL = API_BASE; // client will call our server endpoints
+const getApiOrigin = () => {
+  if (API_BASE) {
+    return API_BASE.replace(/\/+$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "http://localhost:5000";
+};
+
+const buildApiUrl = (path, query = {}) => {
+  const url = new URL(path, getApiOrigin());
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.append(key, String(value));
+    }
+  });
+
+  return url;
+};
+
+const createRequestController = (timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timer),
+  };
+};
 
 class YouTubeService {
+  async request(path, query = {}) {
+    const url = buildApiUrl(path, query);
+    const { signal, cleanup } = createRequestController();
+
+    try {
+      const response = await fetch(url.toString(), { signal });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || `Request failed (${response.status})`,
+        );
+      }
+
+      if (!payload || payload.success === false) {
+        throw new Error(payload?.error || "Unexpected API response");
+      }
+
+      return payload;
+    } finally {
+      cleanup();
+    }
+  }
+
+  normalizeSearchItem(item) {
+    if (item?.id && item?.snippet) {
+      return this.formatSearchResults([item])[0];
+    }
+
+    const id = item?.id || "";
+    return {
+      id,
+      type: item?.type || "video",
+      title: item?.title || "",
+      description: item?.description || "",
+      thumbnail: item?.thumbnail || {},
+      channelTitle: item?.channelTitle || "",
+      channelId: item?.channelId || "",
+      publishedAt: item?.publishedAt || "",
+      url: item?.url || this.getVideoUrl(id),
+      embedUrl: item?.embedUrl || this.getEmbedUrl(id),
+    };
+  }
+
+  normalizeVideoItem(item) {
+    if (item?.id && item?.snippet) {
+      return this.formatVideoDetails(item);
+    }
+
+    const id = item?.id || "";
+    return {
+      id,
+      title: item?.title || "",
+      description: item?.description || "",
+      thumbnail: item?.thumbnail || {},
+      channelTitle: item?.channelTitle || "",
+      channelId: item?.channelId || "",
+      publishedAt: item?.publishedAt || "",
+      duration: item?.duration || "",
+      viewCount: item?.viewCount || "0",
+      likeCount: item?.likeCount || "0",
+      commentCount: item?.commentCount || "0",
+      url: item?.url || this.getVideoUrl(id),
+      embedUrl: item?.embedUrl || this.getEmbedUrl(id),
+    };
+  }
+
   /**
    * Search for videos on YouTube
    * @param {string} query - Search query
    * @param {number} maxResults - Maximum number of results (default: 10)
    * @param {string} type - Type of content (video, channel, playlist)
-   * @returns {Promise<Array>} Array of video results
+   * @returns {Promise<{items:Array, source:string, note:string}>}
    */
   async searchVideos(query, maxResults = 10, type = "video") {
-    try {
-  // Call the server proxy endpoint instead of calling YouTube directly
-  const url = new URL(`${YOUTUBE_API_BASE_URL}/api/youtube/search`);
-  url.searchParams.append("q", query);
-  url.searchParams.append("maxResults", maxResults);
-  url.searchParams.append("type", type);
-
-  const response = await fetch(url.toString());
-
-      if (!response.ok) {
-        throw new Error(
-          `YouTube API error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-
-      return this.formatSearchResults(data.items || []);
-    } catch (error) {
-      console.error("YouTube search error:", error);
-      throw new Error("Failed to search YouTube. Please try again.");
+    if (!query || !query.trim()) {
+      return { items: [], source: "client_validation", note: "" };
     }
+
+    const payload = await this.request("/api/youtube/search", {
+      q: query.trim(),
+      maxResults,
+      type,
+    });
+
+    const items = Array.isArray(payload.data) ? payload.data : [];
+
+    return {
+      items: items.map((item) => this.normalizeSearchItem(item)),
+      source: payload.source || "youtube_api",
+      note: payload.note || "",
+    };
   }
 
   /**
@@ -47,25 +141,19 @@ class YouTubeService {
    * @returns {Promise<Object>} Video details
    */
   async getVideoDetails(videoId) {
-    try {
-  const url = new URL(`${YOUTUBE_API_BASE_URL}/api/youtube/video/${encodeURIComponent(videoId)}`);
-  const response = await fetch(url.toString());
-
-      if (!response.ok) {
-        throw new Error(`YouTube API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.items && data.items.length > 0) {
-        return this.formatVideoDetails(data.items[0]);
-      }
-
-      throw new Error("Video not found");
-    } catch (error) {
-      console.error("YouTube video details error:", error);
-      throw error;
+    if (!videoId) {
+      throw new Error("Video ID is required");
     }
+
+    const payload = await this.request(
+      `/api/youtube/video/${encodeURIComponent(videoId)}`,
+    );
+
+    if (!payload.data) {
+      throw new Error("Video not found");
+    }
+
+    return this.normalizeVideoItem(payload.data);
   }
 
   /**
@@ -150,9 +238,9 @@ class YouTubeService {
     const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
     if (!match) return "";
 
-    const hours = parseInt(match[1]) || 0;
-    const minutes = parseInt(match[2]) || 0;
-    const seconds = parseInt(match[3]) || 0;
+    const hours = Number.parseInt(match[1]?.replace("H", "") || "0", 10);
+    const minutes = Number.parseInt(match[2]?.replace("M", "") || "0", 10);
+    const seconds = Number.parseInt(match[3]?.replace("S", "") || "0", 10);
 
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
@@ -170,7 +258,12 @@ class YouTubeService {
   formatViewCount(viewCount) {
     if (!viewCount) return "0 views";
 
-    const count = parseInt(viewCount);
+    const count = Number.parseInt(viewCount, 10);
+
+    if (Number.isNaN(count)) {
+      return "0 views";
+    }
+
     if (count >= 1000000) {
       return `${(count / 1000000).toFixed(1)}M views`;
     } else if (count >= 1000) {

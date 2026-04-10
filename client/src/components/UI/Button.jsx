@@ -7,9 +7,10 @@ export default function Button({
   animate = false,
   ...props
 }) {
+  const { styles, animated } = useSpringFade(animate);
+  const AnimatedBtn = animated("button");
+
   if (animate) {
-    const { styles, animated } = useSpringFade(true);
-    const AnimatedBtn = animated("button");
     return (
       <AnimatedBtn
         style={styles}

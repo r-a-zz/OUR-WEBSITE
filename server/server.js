@@ -4,67 +4,65 @@ const axios = require("axios");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// YouTube API Configuration (require env var for safety)
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const PORT = Number.parseInt(process.env.PORT || "5000", 10);
+const YOUTUBE_API_KEY = (process.env.YOUTUBE_API_KEY || "").trim();
 const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
+const REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.YOUTUBE_API_TIMEOUT_MS || "10000",
+  10,
+);
+const CORS_ORIGIN = (process.env.CORS_ORIGIN || "*").trim();
 
-if (!YOUTUBE_API_KEY) {
-  console.error("FATAL: Missing required environment variable YOUTUBE_API_KEY. Set it in server/.env or your environment.");
-  process.exit(1);
-}
+const resolveCorsOrigin = () => {
+  if (!CORS_ORIGIN || CORS_ORIGIN === "*") {
+    return true;
+  }
 
-app.use(cors());
+  return CORS_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
+const corsOptions = {
+  origin: resolveCorsOrigin(),
+  methods: ["GET", "POST", "OPTIONS"],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
-// Note: MongoDB is disabled for this project
-// The server runs without database and focuses on YouTube API functionality
-console.log("🚀 Server starting without database connection...");
+const youtubeClient = axios.create({
+  baseURL: YOUTUBE_API_BASE_URL,
+  timeout: REQUEST_TIMEOUT_MS,
+});
 
-// YouTube API Helper Functions
-const formatSearchResults = (items) => {
-  return items.map((item) => ({
-    id: item.id.videoId || item.id.channelId || item.id.playlistId,
-    type: item.id.kind?.replace("youtube#", "") || "video",
-    title: item.snippet.title,
-    description: item.snippet.description,
-    thumbnail: {
-      default: item.snippet.thumbnails.default?.url,
-      medium: item.snippet.thumbnails.medium?.url,
-      high: item.snippet.thumbnails.high?.url,
-      maxres: item.snippet.thumbnails.maxres?.url,
-    },
-    channelTitle: item.snippet.channelTitle,
-    channelId: item.snippet.channelId,
-    publishedAt: item.snippet.publishedAt,
-    url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-    embedUrl: `https://www.youtube.com/embed/${item.id.videoId}?autoplay=1&rel=0&modestbranding=1`,
-  }));
+if (!YOUTUBE_API_KEY) {
+  console.warn(
+    "YOUTUBE_API_KEY is missing. Server is running in demo mode with fallback data.",
+  );
+}
+
+const clampMaxResults = (value, fallback = 10) => {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, 1), 50);
 };
 
-const formatVideoDetails = (item) => {
-  return {
-    id: item.id,
-    title: item.snippet.title,
-    description: item.snippet.description,
-    thumbnail: {
-      default: item.snippet.thumbnails.default?.url,
-      medium: item.snippet.thumbnails.medium?.url,
-      high: item.snippet.thumbnails.high?.url,
-      maxres: item.snippet.thumbnails.maxres?.url,
-    },
-    channelTitle: item.snippet.channelTitle,
-    channelId: item.snippet.channelId,
-    publishedAt: item.snippet.publishedAt,
-    duration: item.contentDetails?.duration,
-    viewCount: item.statistics?.viewCount,
-    likeCount: item.statistics?.likeCount,
-    commentCount: item.statistics?.commentCount,
-    url: `https://www.youtube.com/watch?v=${item.id}`,
-    embedUrl: `https://www.youtube.com/embed/${item.id}?autoplay=1&rel=0&modestbranding=1`,
-  };
-};
+const createSuccess = (data, meta = {}) => ({
+  success: true,
+  data,
+  ...meta,
+});
+
+const createError = (error, meta = {}) => ({
+  success: false,
+  error,
+  ...meta,
+});
 
 const parseDuration = (duration) => {
   if (!duration) return "";
@@ -72,33 +70,94 @@ const parseDuration = (duration) => {
   const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
   if (!match) return "";
 
-  const hours = parseInt(match[1]) || 0;
-  const minutes = parseInt(match[2]) || 0;
-  const seconds = parseInt(match[3]) || 0;
+  const hours = Number.parseInt(match[1]?.replace("H", "") || "0", 10);
+  const minutes = Number.parseInt(match[2]?.replace("M", "") || "0", 10);
+  const seconds = Number.parseInt(match[3]?.replace("S", "") || "0", 10);
 
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
       .toString()
       .padStart(2, "0")}`;
   }
+
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
 const formatViewCount = (viewCount) => {
   if (!viewCount) return "0 views";
 
-  const count = parseInt(viewCount);
+  const count = Number.parseInt(viewCount, 10);
+  if (Number.isNaN(count)) return "0 views";
+
   if (count >= 1000000) {
     return `${(count / 1000000).toFixed(1)}M views`;
-  } else if (count >= 1000) {
+  }
+
+  if (count >= 1000) {
     return `${(count / 1000).toFixed(1)}K views`;
   }
+
   return `${count} views`;
 };
 
-// YouTube API Routes
+const buildVideoUrl = (videoId) =>
+  videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
 
-// Mock data for demo purposes when API is not available
+const buildEmbedUrl = (videoId) =>
+  videoId
+    ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
+    : null;
+
+const formatSearchResults = (items = []) => {
+  return items.map((item) => {
+    const videoId = item.id?.videoId || null;
+    const id = videoId || item.id?.channelId || item.id?.playlistId || "";
+
+    return {
+      id,
+      type: item.id?.kind?.replace("youtube#", "") || "video",
+      title: item.snippet?.title || "",
+      description: item.snippet?.description || "",
+      thumbnail: {
+        default: item.snippet?.thumbnails?.default?.url,
+        medium: item.snippet?.thumbnails?.medium?.url,
+        high: item.snippet?.thumbnails?.high?.url,
+        maxres: item.snippet?.thumbnails?.maxres?.url,
+      },
+      channelTitle: item.snippet?.channelTitle || "",
+      channelId: item.snippet?.channelId || "",
+      publishedAt: item.snippet?.publishedAt || "",
+      url: buildVideoUrl(videoId),
+      embedUrl: buildEmbedUrl(videoId),
+    };
+  });
+};
+
+const formatVideoDetails = (item) => {
+  const id = item?.id || "";
+
+  return {
+    id,
+    title: item?.snippet?.title || "",
+    description: item?.snippet?.description || "",
+    thumbnail: {
+      default: item?.snippet?.thumbnails?.default?.url,
+      medium: item?.snippet?.thumbnails?.medium?.url,
+      high: item?.snippet?.thumbnails?.high?.url,
+      maxres: item?.snippet?.thumbnails?.maxres?.url,
+    },
+    channelTitle: item?.snippet?.channelTitle || "",
+    channelId: item?.snippet?.channelId || "",
+    publishedAt: item?.snippet?.publishedAt || "",
+    duration: item?.contentDetails?.duration,
+    viewCount: item?.statistics?.viewCount,
+    likeCount: item?.statistics?.likeCount,
+    commentCount: item?.statistics?.commentCount,
+    url: buildVideoUrl(id),
+    embedUrl: buildEmbedUrl(id),
+  };
+};
+
 const mockYouTubeData = [
   {
     id: "dQw4w9WgXcQ",
@@ -114,6 +173,7 @@ const mockYouTubeData = [
     channelTitle: "Rick Astley",
     channelId: "UCuAXFkgsw1L7xaCfnd5JJOw",
     publishedAt: "2009-10-25T06:57:33Z",
+    viewCount: "1200000000",
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     embedUrl:
       "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&modestbranding=1",
@@ -131,6 +191,7 @@ const mockYouTubeData = [
     channelTitle: "officialpsy",
     channelId: "UCrDkAvF9ZkmwbKNlYtQ7cFA",
     publishedAt: "2012-07-15T08:34:21Z",
+    viewCount: "5000000000",
     url: "https://www.youtube.com/watch?v=9bZkp7q19f0",
     embedUrl:
       "https://www.youtube.com/embed/9bZkp7q19f0?autoplay=1&rel=0&modestbranding=1",
@@ -148,6 +209,7 @@ const mockYouTubeData = [
     channelTitle: "LuisFonsiVEVO",
     channelId: "UCJrOtniJ0-NY4bcRiAx0E2A",
     publishedAt: "2017-01-12T18:30:00Z",
+    viewCount: "8000000000",
     url: "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
     embedUrl:
       "https://www.youtube.com/embed/kJQP7kiw5Fk?autoplay=1&rel=0&modestbranding=1",
@@ -165,6 +227,7 @@ const mockYouTubeData = [
     channelTitle: "Ed Sheeran",
     channelId: "UC0C-w0YjGpqDXGB8IHb662A",
     publishedAt: "2017-01-30T10:53:17Z",
+    viewCount: "6200000000",
     url: "https://www.youtube.com/watch?v=JGwWNGJdvx8",
     embedUrl:
       "https://www.youtube.com/embed/JGwWNGJdvx8?autoplay=1&rel=0&modestbranding=1",
@@ -183,6 +246,7 @@ const mockYouTubeData = [
     channelTitle: "NirvanaVEVO",
     channelId: "UCDMZlIIJZplFWwIYWG8QqiQ",
     publishedAt: "2013-07-16T17:00:07Z",
+    viewCount: "1800000000",
     url: "https://www.youtube.com/watch?v=hTWKbfoikeg",
     embedUrl:
       "https://www.youtube.com/embed/hTWKbfoikeg?autoplay=1&rel=0&modestbranding=1",
@@ -200,98 +264,147 @@ const mockYouTubeData = [
     channelTitle: "AdeleVEVO",
     channelId: "UComP_epzeKzvBX156r6pm1Q",
     publishedAt: "2015-10-22T15:00:00Z",
+    viewCount: "3200000000",
     url: "https://www.youtube.com/watch?v=YQHsXMglC9A",
     embedUrl:
       "https://www.youtube.com/embed/YQHsXMglC9A?autoplay=1&rel=0&modestbranding=1",
   },
 ];
 
-// Search YouTube videos
+const getDemoSearchResults = (query, maxResults) => {
+  const searchTerm = query.toLowerCase();
+
+  const filteredResults = mockYouTubeData.filter(
+    (video) =>
+      video.title.toLowerCase().includes(searchTerm) ||
+      video.description.toLowerCase().includes(searchTerm) ||
+      video.channelTitle.toLowerCase().includes(searchTerm),
+  );
+
+  const results =
+    filteredResults.length > 0 ? filteredResults : mockYouTubeData;
+  return results.slice(0, maxResults);
+};
+
+const withComputedVideoFields = (video) => ({
+  ...video,
+  formattedDuration: parseDuration(video.duration),
+  formattedViewCount: formatViewCount(video.viewCount),
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json(
+    createSuccess(
+      {
+        service: "youtube-api-server",
+        status: "ok",
+        uptimeSeconds: Math.floor(process.uptime()),
+      },
+      {
+        mode: YOUTUBE_API_KEY ? "live" : "demo",
+      },
+    ),
+  );
+});
+
+app.get("/api", (_req, res) => {
+  res.json(
+    createSuccess({
+      message: "OUR-WEBSITE API is running",
+      endpoints: [
+        "/api/health",
+        "/api/youtube/search",
+        "/api/youtube/video/:videoId",
+        "/api/youtube/trending",
+      ],
+    }),
+  );
+});
+
 app.get("/api/youtube/search", async (req, res) => {
+  const query = String(req.query.q || "").trim();
+  const maxResults = clampMaxResults(req.query.maxResults, 10);
+  const type = String(req.query.type || "video");
+
+  if (!query) {
+    return res
+      .status(400)
+      .json(createError("Search query is required", { field: "q" }));
+  }
+
+  if (!YOUTUBE_API_KEY) {
+    const demoResults = getDemoSearchResults(query, maxResults);
+    return res.json(
+      createSuccess(demoResults, {
+        totalResults: demoResults.length,
+        resultsPerPage: demoResults.length,
+        source: "demo_data",
+        note: "Set YOUTUBE_API_KEY to enable live YouTube search.",
+      }),
+    );
+  }
+
   try {
-    const { q, maxResults = 10, type = "video" } = req.query;
+    const response = await youtubeClient.get("/search", {
+      params: {
+        part: "snippet",
+        q: query,
+        type,
+        maxResults,
+        key: YOUTUBE_API_KEY,
+        order: "relevance",
+        safeSearch: "moderate",
+      },
+    });
 
-    if (!q || q.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        error: "Search query is required",
-      });
-    }
+    const formattedResults = formatSearchResults(response.data.items || []);
 
-    // Try actual YouTube API first
-    try {
-      const response = await axios.get(`${YOUTUBE_API_BASE_URL}/search`, {
-        params: {
-          part: "snippet",
-          q: q.trim(),
-          type,
-          maxResults: Math.min(parseInt(maxResults), 50), // Limit to 50 max
-          key: YOUTUBE_API_KEY,
-          order: "relevance",
-          safeSearch: "moderate",
-        },
-      });
-
-      const formattedResults = formatSearchResults(response.data.items || []);
-
-      res.json({
-        success: true,
-        data: formattedResults,
+    return res.json(
+      createSuccess(formattedResults, {
         totalResults: response.data.pageInfo?.totalResults || 0,
         resultsPerPage: response.data.pageInfo?.resultsPerPage || 0,
         source: "youtube_api",
-      });
-    } catch (apiError) {
-      console.log(
-        "YouTube API not available, using demo data:",
-        apiError.response?.data?.error?.message
-      );
-
-      // Fallback to mock data with search filtering
-      const searchTerm = q.toLowerCase();
-      const filteredResults = mockYouTubeData.filter(
-        (video) =>
-          video.title.toLowerCase().includes(searchTerm) ||
-          video.description.toLowerCase().includes(searchTerm) ||
-          video.channelTitle.toLowerCase().includes(searchTerm)
-      );
-
-      // If no matches, return all mock data
-      const results =
-        filteredResults.length > 0 ? filteredResults : mockYouTubeData;
-
-      res.json({
-        success: true,
-        data: results.slice(0, parseInt(maxResults)),
-        totalResults: results.length,
-        resultsPerPage: results.length,
-        source: "demo_data",
-        note: "YouTube API not available. Enable YouTube Data API v3 in Google Cloud Console for live search.",
-      });
-    }
+      }),
+    );
   } catch (error) {
-    console.error("YouTube search error:", error.message);
+    const fallbackResults = getDemoSearchResults(query, maxResults);
 
-    res.status(500).json({
-      success: false,
-      error: "Failed to search YouTube videos",
-    });
+    return res.json(
+      createSuccess(fallbackResults, {
+        totalResults: fallbackResults.length,
+        resultsPerPage: fallbackResults.length,
+        source: "demo_data",
+        note:
+          error.response?.data?.error?.message ||
+          "YouTube API unavailable. Returned demo data.",
+      }),
+    );
   }
 });
 
-// Get YouTube video details
 app.get("/api/youtube/video/:videoId", async (req, res) => {
-  try {
-    const { videoId } = req.params;
+  const videoId = String(req.params.videoId || "").trim();
 
-    if (!videoId) {
-      return res.status(400).json({
-        success: false,
-        error: "Video ID is required",
-      });
+  if (!videoId) {
+    return res
+      .status(400)
+      .json(createError("Video ID is required", { field: "videoId" }));
+  }
+
+  if (!YOUTUBE_API_KEY) {
+    const fallback = mockYouTubeData.find((video) => video.id === videoId);
+
+    if (!fallback) {
+      return res.status(404).json(createError("Video not found"));
     }
 
-    const response = await axios.get(`${YOUTUBE_API_BASE_URL}/videos`, {
+    return res.json(
+      createSuccess(withComputedVideoFields(fallback), { source: "demo_data" }),
+    );
+  }
+
+  try {
+    const response = await youtubeClient.get("/videos", {
       params: {
         part: "snippet,statistics,contentDetails",
         id: videoId,
@@ -300,56 +413,57 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
     });
 
     if (!response.data.items || response.data.items.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Video not found",
-      });
+      return res.status(404).json(createError("Video not found"));
     }
 
     const videoDetails = formatVideoDetails(response.data.items[0]);
 
-    // Add formatted duration and view count
-    videoDetails.formattedDuration = parseDuration(videoDetails.duration);
-    videoDetails.formattedViewCount = formatViewCount(videoDetails.viewCount);
-
-    res.json({
-      success: true,
-      data: videoDetails,
-    });
-  } catch (error) {
-    console.error(
-      "YouTube video details error:",
-      error.response?.data || error.message
+    return res.json(
+      createSuccess({
+        ...videoDetails,
+        formattedDuration: parseDuration(videoDetails.duration),
+        formattedViewCount: formatViewCount(videoDetails.viewCount),
+      }),
     );
-
+  } catch (error) {
     if (error.response?.status === 403) {
-      res.status(403).json({
-        success: false,
-        error: "YouTube API quota exceeded or invalid API key",
-      });
-    } else if (error.response?.status === 404) {
-      res.status(404).json({
-        success: false,
-        error: "Video not found",
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        error: "Failed to get video details",
-      });
+      return res
+        .status(403)
+        .json(createError("YouTube API quota exceeded or invalid API key"));
     }
+
+    if (error.response?.status === 404) {
+      return res.status(404).json(createError("Video not found"));
+    }
+
+    return res.status(500).json(createError("Failed to get video details"));
   }
 });
 
-// Get trending videos
 app.get("/api/youtube/trending", async (req, res) => {
-  try {
-    const { maxResults = 10, categoryId, regionCode = "US" } = req.query;
+  const maxResults = clampMaxResults(req.query.maxResults, 10);
+  const categoryId = req.query.categoryId;
+  const regionCode = String(req.query.regionCode || "US");
 
+  if (!YOUTUBE_API_KEY) {
+    const fallback = mockYouTubeData
+      .slice(0, maxResults)
+      .map(withComputedVideoFields);
+
+    return res.json(
+      createSuccess(fallback, {
+        totalResults: fallback.length,
+        source: "demo_data",
+        note: "Set YOUTUBE_API_KEY to enable live trending videos.",
+      }),
+    );
+  }
+
+  try {
     const params = {
-      part: "snippet,statistics",
+      part: "snippet,statistics,contentDetails",
       chart: "mostPopular",
-      maxResults: Math.min(parseInt(maxResults), 50),
+      maxResults,
       regionCode,
       key: YOUTUBE_API_KEY,
     };
@@ -358,39 +472,40 @@ app.get("/api/youtube/trending", async (req, res) => {
       params.videoCategoryId = categoryId;
     }
 
-    const response = await axios.get(`${YOUTUBE_API_BASE_URL}/videos`, {
-      params,
-    });
+    const response = await youtubeClient.get("/videos", { params });
 
-    const formattedResults = response.data.items.map((item) => {
+    const formattedResults = (response.data.items || []).map((item) => {
       const formatted = formatVideoDetails(item);
-      formatted.formattedDuration = parseDuration(formatted.duration);
-      formatted.formattedViewCount = formatViewCount(formatted.viewCount);
-      return formatted;
+      return {
+        ...formatted,
+        formattedDuration: parseDuration(formatted.duration),
+        formattedViewCount: formatViewCount(formatted.viewCount),
+      };
     });
 
-    res.json({
-      success: true,
-      data: formattedResults,
-      totalResults: response.data.pageInfo?.totalResults || 0,
-    });
-  } catch (error) {
-    console.error(
-      "YouTube trending error:",
-      error.response?.data || error.message
+    return res.json(
+      createSuccess(formattedResults, {
+        totalResults:
+          response.data.pageInfo?.totalResults || formattedResults.length,
+        source: "youtube_api",
+      }),
     );
-
-    res.status(500).json({
-      success: false,
-      error: "Failed to get trending videos",
-    });
+  } catch (_error) {
+    return res.status(500).json(createError("Failed to get trending videos"));
   }
 });
 
-app.get("/api", (req, res) => {
-  res.json({ message: "Gift API is running!" });
+app.use("/api", (_req, res) => {
+  res.status(404).json(createError("API route not found"));
+});
+
+app.use((error, _req, res, _next) => {
+  console.error("Unhandled server error:", error);
+  res.status(500).json(createError("Internal server error"));
 });
 
 app.listen(PORT, () => {
-  console.log(`Gift server running on port ${PORT}`);
+  console.log(
+    `Server is running on port ${PORT} (${YOUTUBE_API_KEY ? "live" : "demo"} mode)`,
+  );
 });
