@@ -4,9 +4,8 @@
  * @version 2.0.0
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { APP_CONFIG } from "../constants";
-import { debounce } from "../utils/dateUtils";
 import { logger, perfMonitor } from "../utils/debugUtils";
 import { COMPONENT_NAMES } from "../types";
 
@@ -17,6 +16,8 @@ const COMPONENT_NAME = COMPONENT_NAMES.RESPONSIVE_HOOK || "useResponsive";
  * @returns {ResponsiveConfig} Responsive utilities and screen size information
  */
 export const useResponsive = () => {
+  const resizeFrameRef = useRef(null);
+
   // Initialize with SSR-safe values
   const getInitialScreenSize = useCallback(() => {
     if (typeof window === "undefined") {
@@ -31,6 +32,23 @@ export const useResponsive = () => {
   const [screenSize, setScreenSize] = useState(getInitialScreenSize);
   const [isHydrated, setIsHydrated] = useState(false);
 
+  const isLowPerformanceDevice = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false;
+    }
+
+    const lowCpu =
+      typeof navigator.hardwareConcurrency === "number" &&
+      navigator.hardwareConcurrency <= 4;
+
+    const lowMemory =
+      typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
+
+    const saveDataEnabled = Boolean(navigator.connection?.saveData);
+
+    return lowCpu || lowMemory || saveDataEnabled;
+  }, []);
+
   // Memoized device type calculation for performance
   const deviceType = useMemo(() => {
     const { width } = screenSize;
@@ -43,7 +61,7 @@ export const useResponsive = () => {
     };
 
     // Only log in development and when values actually change
-    if (process.env.NODE_ENV === "development" && isHydrated) {
+    if (import.meta.env.DEV && isHydrated) {
       logger.debug(COMPONENT_NAME, "Device type updated", {
         width,
         breakpoints: { MOBILE, TABLET },
@@ -52,7 +70,7 @@ export const useResponsive = () => {
     }
 
     return result;
-  }, [screenSize.width, isHydrated]);
+  }, [screenSize, isHydrated]);
 
   // Performance-optimized star and heart counts
   const performanceConfig = useMemo(
@@ -64,7 +82,7 @@ export const useResponsive = () => {
         ? APP_CONFIG.PERFORMANCE.HEART_COUNT_MOBILE
         : APP_CONFIG.PERFORMANCE.HEART_COUNT_DESKTOP,
     }),
-    [deviceType.isMobile]
+    [deviceType.isMobile],
   );
 
   // Optimized screen size update function
@@ -95,15 +113,21 @@ export const useResponsive = () => {
     perfMonitor.end("updateScreenSize", COMPONENT_NAME);
   }, []);
 
-  // Debounced resize handler with error boundary
-  const debouncedUpdateScreenSize = useMemo(
-    () => debounce(updateScreenSize, 150),
-    [updateScreenSize]
-  );
-
   useEffect(() => {
     // SSR hydration guard
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return undefined;
+
+    const handleResize = () => {
+      // Throttle resize updates to one paint frame.
+      if (resizeFrameRef.current !== null) {
+        return;
+      }
+
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        updateScreenSize();
+      });
+    };
 
     try {
       // Initial update
@@ -111,19 +135,27 @@ export const useResponsive = () => {
       setIsHydrated(true);
 
       // Add resize listener
-      window.addEventListener("resize", debouncedUpdateScreenSize, {
+      window.addEventListener("resize", handleResize, {
         passive: true,
       });
 
-      logger.info(COMPONENT_NAME, "Responsive hook initialized", {
-        initialSize: screenSize,
-        breakpoints: APP_CONFIG.RESPONSIVE_BREAKPOINTS,
-      });
+      if (import.meta.env.DEV) {
+        logger.info(COMPONENT_NAME, "Responsive hook initialized", {
+          breakpoints: APP_CONFIG.RESPONSIVE_BREAKPOINTS,
+        });
+      }
 
       // Cleanup function
       return () => {
-        window.removeEventListener("resize", debouncedUpdateScreenSize);
-        logger.debug(COMPONENT_NAME, "Responsive hook cleanup completed");
+        window.removeEventListener("resize", handleResize);
+
+        if (resizeFrameRef.current !== null) {
+          window.cancelAnimationFrame(resizeFrameRef.current);
+        }
+
+        if (import.meta.env.DEV) {
+          logger.debug(COMPONENT_NAME, "Responsive hook cleanup completed");
+        }
       };
     } catch (error) {
       logger.error(COMPONENT_NAME, "Error in useResponsive setup", {
@@ -131,7 +163,8 @@ export const useResponsive = () => {
         stack: error.stack,
       });
     }
-  }, [debouncedUpdateScreenSize, updateScreenSize, screenSize]);
+    return undefined;
+  }, [updateScreenSize]);
 
   // Return memoized result to prevent unnecessary re-renders
   return useMemo(
@@ -140,7 +173,14 @@ export const useResponsive = () => {
       ...deviceType,
       ...performanceConfig,
       isHydrated,
+      isLowPerformanceDevice,
     }),
-    [screenSize, deviceType, performanceConfig, isHydrated]
+    [
+      screenSize,
+      deviceType,
+      performanceConfig,
+      isHydrated,
+      isLowPerformanceDevice,
+    ],
   );
 };

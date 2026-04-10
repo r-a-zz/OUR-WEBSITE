@@ -1,12 +1,12 @@
 import React, { memo, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useResponsive } from "../../hooks/useResponsive";
 import { APP_CONFIG } from "../../constants";
 
 /**
  * StarField Component - Renders animated stars
  */
-const StarField = memo(({ count, variant = "normal" }) => {
+const StarField = memo(({ count, variant = "normal", isReducedMotion }) => {
   const stars = useMemo(() => {
     return [...Array(count)].map((_, i) => ({
       id: i,
@@ -31,6 +31,29 @@ const StarField = memo(({ count, variant = "normal" }) => {
   };
 
   const isBright = variant === "bright";
+
+  if (isReducedMotion) {
+    return (
+      <>
+        {stars.map((star) => (
+          <div
+            key={star.id}
+            className={`absolute rounded-full ${
+              isBright ? "bg-cyan-200" : "bg-white"
+            }`}
+            style={{
+              left: star.left,
+              top: star.top,
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              opacity: isBright ? 0.65 : 0.45,
+              boxShadow: isBright ? "0 0 3px rgba(34, 211, 238, 0.35)" : "none",
+            }}
+          />
+        ))}
+      </>
+    );
+  }
 
   return (
     <>
@@ -120,32 +143,35 @@ FloatingHearts.displayName = "FloatingHearts";
 /**
  * NebulaCloud Component - Renders animated nebula effects
  */
-const NebulaCloud = memo(({ className, gradient, duration, delay = 0 }) => {
-  const nebulaVariants = {
-    animate: {
-      scale: [1, 1.2, 1],
-      opacity: [0.1, 0.3, 0.1],
-    },
-  };
+const NebulaCloud = memo(
+  ({ className, gradient, duration, delay = 0, style = {} }) => {
+    const nebulaVariants = {
+      animate: {
+        scale: [1, 1.2, 1],
+        opacity: [0.1, 0.3, 0.1],
+      },
+    };
 
-  return (
-    <motion.div
-      variants={nebulaVariants}
-      animate="animate"
-      transition={{
-        duration,
-        repeat: Infinity,
-        ease: "linear",
-        delay,
-      }}
-      className={`absolute rounded-full ${className}`}
-      style={{
-        background: gradient,
-        willChange: "transform",
-      }}
-    />
-  );
-});
+    return (
+      <motion.div
+        variants={nebulaVariants}
+        animate="animate"
+        transition={{
+          duration,
+          repeat: Infinity,
+          ease: "linear",
+          delay,
+        }}
+        className={`absolute rounded-full ${className}`}
+        style={{
+          background: gradient,
+          willChange: "transform",
+          ...style,
+        }}
+      />
+    );
+  },
+);
 
 NebulaCloud.displayName = "NebulaCloud";
 
@@ -153,18 +179,42 @@ NebulaCloud.displayName = "NebulaCloud";
  * CosmosBackground Component - Main cosmic background with optimized performance
  */
 const CosmosBackground = memo(() => {
-  const { isMobile, starCount, heartCount } = useResponsive();
+  const { isMobile, starCount, heartCount, isLowPerformanceDevice } =
+    useResponsive();
+  const prefersReducedMotion = useReducedMotion();
+
+  const shouldReduceEffects = prefersReducedMotion || isLowPerformanceDevice;
+
+  const optimizedStarCount = useMemo(
+    () =>
+      shouldReduceEffects
+        ? Math.max(14, Math.floor(starCount * 0.45))
+        : starCount,
+    [shouldReduceEffects, starCount],
+  );
+
+  const optimizedBrightStarCount = useMemo(
+    () =>
+      shouldReduceEffects
+        ? Math.max(
+            3,
+            Math.floor(APP_CONFIG.PERFORMANCE.BRIGHT_STAR_COUNT * 0.5),
+          )
+        : APP_CONFIG.PERFORMANCE.BRIGHT_STAR_COUNT,
+    [shouldReduceEffects],
+  );
+
+  const optimizedHeartCount = useMemo(
+    () =>
+      shouldReduceEffects
+        ? Math.min(2, Math.floor(heartCount / 2))
+        : heartCount,
+    [heartCount, shouldReduceEffects],
+  );
 
   const shootingStarVariants = {
     animate: {
-      x: [
-        -50,
-        typeof window !== "undefined"
-          ? isMobile
-            ? window.innerWidth / 2
-            : window.innerWidth + 50
-          : 1000,
-      ],
+      x: ["-12vw", "112vw"],
       opacity: [0, 0.8, 0],
     },
   };
@@ -176,7 +226,10 @@ const CosmosBackground = memo(() => {
   };
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      aria-hidden="true"
+    >
       {/* Static base layers */}
       <div className="absolute inset-0 bg-black" />
       <div className="absolute inset-0 bg-gradient-to-br from-gray-900/30 via-slate-900/20 to-black" />
@@ -188,7 +241,11 @@ const CosmosBackground = memo(() => {
         gradient="radial-gradient(circle, rgba(34, 211, 238, 0.15) 0%, transparent 70%)"
         duration={20}
         style={{
-          filter: isMobile ? "blur(20px)" : "blur(40px)",
+          filter: shouldReduceEffects
+            ? "blur(12px)"
+            : isMobile
+              ? "blur(20px)"
+              : "blur(40px)",
         }}
       />
 
@@ -198,38 +255,51 @@ const CosmosBackground = memo(() => {
         duration={25}
         delay={10}
         style={{
-          filter: isMobile ? "blur(20px)" : "blur(40px)",
+          filter: shouldReduceEffects
+            ? "blur(12px)"
+            : isMobile
+              ? "blur(20px)"
+              : "blur(40px)",
         }}
       />
 
       {/* Star fields */}
-      <StarField count={starCount} variant="normal" />
       <StarField
-        count={APP_CONFIG.PERFORMANCE.BRIGHT_STAR_COUNT}
+        count={optimizedStarCount}
+        variant="normal"
+        isReducedMotion={shouldReduceEffects}
+      />
+      <StarField
+        count={optimizedBrightStarCount}
         variant="bright"
+        isReducedMotion={shouldReduceEffects}
       />
 
       {/* Shooting star */}
-      <motion.div
-        variants={shootingStarVariants}
-        animate="animate"
-        transition={{
-          duration: isMobile ? 0.8 : 1.2,
-          repeat: Infinity,
-          delay: 8,
-          ease: "easeOut",
-        }}
-        className="absolute h-0.5 bg-gradient-to-r from-transparent via-white to-transparent"
-        style={{
-          width: isMobile ? "25px" : "40px",
-          top: "20%",
-          transform: "rotate(15deg)",
-          willChange: "transform",
-        }}
-      />
+      {!shouldReduceEffects && (
+        <motion.div
+          variants={shootingStarVariants}
+          animate="animate"
+          transition={{
+            duration: isMobile ? 0.8 : 1.2,
+            repeat: Infinity,
+            delay: 8,
+            ease: "easeOut",
+          }}
+          className="absolute h-0.5 bg-gradient-to-r from-transparent via-white to-transparent"
+          style={{
+            width: isMobile ? "25px" : "40px",
+            top: "20%",
+            transform: "rotate(15deg)",
+            willChange: "transform",
+          }}
+        />
+      )}
 
       {/* Floating hearts */}
-      <FloatingHearts count={heartCount} />
+      {!shouldReduceEffects && optimizedHeartCount > 0 && (
+        <FloatingHearts count={optimizedHeartCount} />
+      )}
 
       {/* Grid overlay */}
       <div
@@ -241,22 +311,24 @@ const CosmosBackground = memo(() => {
       />
 
       {/* Distant planet */}
-      <motion.div
-        variants={planetVariants}
-        animate="animate"
-        transition={{
-          duration: 15,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        className="absolute top-20 right-32 w-16 h-16 rounded-full opacity-40"
-        style={{
-          background:
-            "radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.3) 0%, rgba(239, 68, 68, 0.1) 100%)",
-          filter: "blur(1px)",
-          willChange: "transform",
-        }}
-      />
+      {!shouldReduceEffects && (
+        <motion.div
+          variants={planetVariants}
+          animate="animate"
+          transition={{
+            duration: 15,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          className="absolute top-20 right-32 w-16 h-16 rounded-full opacity-40"
+          style={{
+            background:
+              "radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.3) 0%, rgba(239, 68, 68, 0.1) 100%)",
+            filter: "blur(1px)",
+            willChange: "transform",
+          }}
+        />
+      )}
     </div>
   );
 });

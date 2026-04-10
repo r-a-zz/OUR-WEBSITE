@@ -151,7 +151,7 @@ const MenuToggleButton = memo(({ onToggle, isSidebarOpen, isMobile }) => {
       `text-white hover:text-cyan-300 transition-colors duration-200 p-2 sm:p-3 hover:bg-cyan-500/10 rounded-lg flex-shrink-0 touch-manipulation focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:ring-offset-2 focus:ring-offset-transparent ${
         isSidebarOpen && !isMobile ? "lg:opacity-50 lg:pointer-events-none" : ""
       }`,
-    [isSidebarOpen, isMobile]
+    [isSidebarOpen, isMobile],
   );
 
   // Accessibility improvements for iOS
@@ -160,7 +160,7 @@ const MenuToggleButton = memo(({ onToggle, isSidebarOpen, isMobile }) => {
       minHeight: "44px", // iOS minimum touch target
       minWidth: "44px", // iOS minimum touch target
     }),
-    []
+    [],
   );
 
   return (
@@ -194,7 +194,7 @@ const CurrentSectionDisplay = memo(({ currentSection }) => {
   // Memoized section title for performance
   const sectionTitle = useMemo(
     () => currentSection.charAt(0).toUpperCase() + currentSection.slice(1),
-    [currentSection]
+    [currentSection],
   );
 
   return (
@@ -239,12 +239,20 @@ const Header = memo(
     const loveTime = useLoveCounter();
     const { isMobile, isTablet, isDesktop } = useResponsive();
 
-    // Determine counter variant based on screen size
-    const getCounterVariant = () => {
+    const counterVariant = useMemo(() => {
       if (isDesktop) return "desktop";
       if (isTablet) return "tablet";
       return "mobile";
-    };
+    }, [isDesktop, isTablet]);
+
+    const currentSectionLabel = useMemo(
+      () => currentSection.charAt(0).toUpperCase() + currentSection.slice(1),
+      [currentSection],
+    );
+
+    const handleToggleSidebar = useCallback(() => {
+      onToggleSidebar();
+    }, [onToggleSidebar]);
 
     const headerVariants = {
       initial: { y: -50, opacity: 0 },
@@ -274,15 +282,7 @@ const Header = memo(
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
-            onClick={() => {
-              console.log("Menu button clicked, device:", {
-                isMobile,
-                isTablet,
-                isDesktop,
-              }); // Enhanced debug log
-              console.log("Current sidebar state:", isSidebarOpen); // Debug log
-              onToggleSidebar();
-            }}
+            onClick={handleToggleSidebar}
             className={`text-white hover:text-cyan-300 transition-colors duration-200 p-2 sm:p-3 hover:bg-cyan-500/10 rounded-lg flex-shrink-0 touch-manipulation ${
               isSidebarOpen && !isMobile
                 ? "lg:opacity-50 lg:pointer-events-none"
@@ -307,14 +307,11 @@ const Header = memo(
             className="flex items-center space-x-2 sm:space-x-4 lg:space-x-6 overflow-hidden"
           >
             {/* Love Counter - Responsive */}
-            <LoveCounterDisplay
-              loveTime={loveTime}
-              variant={getCounterVariant()}
-            />
+            <LoveCounterDisplay loveTime={loveTime} variant={counterVariant} />
 
             {/* Current Section */}
             <div className="font-semibold text-sm sm:text-base lg:text-lg bg-gradient-to-r from-cyan-300 via-pink-300 to-purple-300 bg-clip-text text-transparent truncate max-w-24 sm:max-w-32 lg:max-w-none">
-              {currentSection.charAt(0).toUpperCase() + currentSection.slice(1)}
+              {currentSectionLabel}
             </div>
 
             {/* Made with Love - Hidden on mobile */}
@@ -328,7 +325,7 @@ const Header = memo(
         </div>
       </motion.header>
     );
-  }
+  },
 );
 
 Header.displayName = "Header";

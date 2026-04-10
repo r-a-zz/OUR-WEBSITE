@@ -13,9 +13,11 @@ class PerformanceAnalyzer {
   constructor() {
     this.metrics = new Map();
     this.observers = [];
-    this.isEnabled =
-      process.env.NODE_ENV === "development" ||
-      localStorage.getItem("perf_monitor") === "true";
+    const monitorFlag =
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("perf_monitor") === "true";
+
+    this.isEnabled = import.meta.env.DEV || monitorFlag;
 
     if (this.isEnabled) {
       this.initializeObservers();
@@ -132,7 +134,7 @@ class PerformanceAnalyzer {
         {
           totalCLS,
           latestShift: entry.value,
-        }
+        },
       );
     }
   }
@@ -336,13 +338,13 @@ export const bundleAnalyzer = {
     // This would integrate with tools like webpack-bundle-analyzer
     logger.info(
       "BundleAnalyzer",
-      "Unused code detection would require build-time analysis"
+      "Unused code detection would require build-time analysis",
     );
   },
 };
 
 // Export for use in development tools
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV && typeof window !== "undefined") {
   window.__PERFORMANCE_ANALYZER__ = performanceAnalyzer;
   window.__BUNDLE_ANALYZER__ = bundleAnalyzer;
 }

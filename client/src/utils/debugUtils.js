@@ -11,9 +11,18 @@ import { LOG_LEVELS } from "../types";
  */
 class Logger {
   constructor() {
-    this.isDevelopment = process.env.NODE_ENV === "development";
-    this.isDebugMode =
-      localStorage.getItem("debug_mode") === "true" || this.isDevelopment;
+    this.isDevelopment = import.meta.env.DEV;
+    this.isDebugMode = this.isDevelopment;
+
+    if (typeof window !== "undefined") {
+      try {
+        this.isDebugMode =
+          window.localStorage.getItem("debug_mode") === "true" ||
+          this.isDevelopment;
+      } catch {
+        this.isDebugMode = this.isDevelopment;
+      }
+    }
   }
 
   /**

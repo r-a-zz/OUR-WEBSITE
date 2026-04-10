@@ -1,5 +1,10 @@
-import React, { Suspense, lazy } from "react";
-import { motion as Motion, AnimatePresence } from "framer-motion";
+import React, { Suspense, lazy, useMemo } from "react";
+import {
+  motion as Motion,
+  AnimatePresence,
+  MotionConfig,
+  useReducedMotion,
+} from "framer-motion";
 import { Home, Info, Layers, Briefcase, FileText, Mail } from "lucide-react";
 
 // Context and Hooks
@@ -15,12 +20,28 @@ import CosmicLoadingSpinner from "./components/UI/CosmicLoadingSpinner";
 import SEO from "./components/SEO";
 
 // Lazy load pages for better performance
-const HomePage = lazy(() => import("./components/Pages/HomePage"));
-const AboutPage = lazy(() => import("./components/Pages/AboutPage"));
-const ServicesPage = lazy(() => import("./components/Pages/ServicesPage"));
-const PortfolioPage = lazy(() => import("./components/Pages/PortfolioPage"));
-const LoveNotesPage = lazy(() => import("./components/Pages/LoveNotesPage"));
-const ContactPage = lazy(() => import("./components/Pages/ContactPage"));
+const loadHomePage = () => import("./components/Pages/HomePage");
+const loadAboutPage = () => import("./components/Pages/AboutPage");
+const loadServicesPage = () => import("./components/Pages/ServicesPage");
+const loadPortfolioPage = () => import("./components/Pages/PortfolioPage");
+const loadLoveNotesPage = () => import("./components/Pages/LoveNotesPage");
+const loadContactPage = () => import("./components/Pages/ContactPage");
+
+const HomePage = lazy(loadHomePage);
+const AboutPage = lazy(loadAboutPage);
+const ServicesPage = lazy(loadServicesPage);
+const PortfolioPage = lazy(loadPortfolioPage);
+const LoveNotesPage = lazy(loadLoveNotesPage);
+const ContactPage = lazy(loadContactPage);
+
+const PAGE_PRELOADERS = [
+  loadHomePage,
+  loadAboutPage,
+  loadServicesPage,
+  loadPortfolioPage,
+  loadLoveNotesPage,
+  loadContactPage,
+];
 
 const NAV_ITEMS = [
   { id: "home", label: "♡ Our Love", icon: Home },
@@ -95,6 +116,18 @@ const PAGE_TRANSITION = {
   duration: 0.2,
 };
 
+const REDUCED_PAGE_VARIANTS = {
+  initial: { opacity: 0 },
+  in: { opacity: 1 },
+  out: { opacity: 0 },
+};
+
+const REDUCED_PAGE_TRANSITION = {
+  type: "tween",
+  ease: "linear",
+  duration: 0.12,
+};
+
 // Loading component
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
@@ -113,6 +146,58 @@ const AppContent = () => {
   } = useApp();
   const isMobile = useMediaQuery("(max-width: 768px)"); // Use same breakpoint as constants
   const escapePressed = useKeyPress("Escape");
+  const prefersReducedMotion = useReducedMotion();
+
+  const ActivePage = useMemo(
+    () => PAGE_COMPONENTS[activeSection] || HomePage,
+    [activeSection],
+  );
+
+  const currentSEO = useMemo(
+    () => SEO_DATA[activeSection] || SEO_DATA.home,
+    [activeSection],
+  );
+
+  const pageVariants = useMemo(
+    () => (prefersReducedMotion ? REDUCED_PAGE_VARIANTS : PAGE_VARIANTS),
+    [prefersReducedMotion],
+  );
+
+  const pageTransition = useMemo(
+    () => (prefersReducedMotion ? REDUCED_PAGE_TRANSITION : PAGE_TRANSITION),
+    [prefersReducedMotion],
+  );
+
+  const handleMainContentClick = React.useCallback(() => {
+    // Close sidebar when clicking on main content on mobile.
+    if (sidebarOpen && isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [sidebarOpen, isMobile, setSidebarOpen]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const preloadPages = () => {
+      PAGE_PRELOADERS.forEach((loader) => {
+        void loader();
+      });
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preloadPages, {
+        timeout: 1200,
+      });
+      return () => {
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timeoutId = window.setTimeout(preloadPages, 600);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   // Close sidebar on escape key press
   React.useEffect(() => {
@@ -128,82 +213,77 @@ const AppContent = () => {
     }
   }, [activeSection, isMobile, setSidebarOpen]);
 
-  const ActivePage = PAGE_COMPONENTS[activeSection] || HomePage;
-
   return (
-    <div
-      className="min-h-screen bg-black relative overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(ellipse at center, #0a0a0a 0%, #000000 40%, #000000 100%)",
-      }}
-    >
-      {/* SEO Component */}
-      <SEO {...(SEO_DATA[activeSection] || SEO_DATA.home)} />
-
-      {/* Enhanced cosmic background */}
-      <CosmosBackground />
-
-      {/* Navigation Sidebar */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onToggle={toggleSidebar}
-        navItems={NAV_ITEMS}
-        activeSection={activeSection}
-        onSectionChange={setActiveSection}
-      />
-
-      {/* Main content area */}
-      <Motion.div
-        className={`transition-all duration-200 ${
-          sidebarOpen ? "lg:ml-64 xl:ml-72" : "ml-0"
-        }`}
-        style={{ willChange: "margin-left" }}
-        onClick={() => {
-          // Close sidebar when clicking on main content (optional enhancement)
-          if (sidebarOpen && isMobile) {
-            setSidebarOpen(false);
-          }
+    <MotionConfig reducedMotion={prefersReducedMotion ? "always" : "never"}>
+      <div
+        className="min-h-screen bg-black relative overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, #0a0a0a 0%, #000000 40%, #000000 100%)",
         }}
       >
-        {/* Header */}
-        <Header
-          onToggleSidebar={toggleSidebar}
-          currentSection={activeSection}
-          isSidebarOpen={sidebarOpen}
+        {/* SEO Component */}
+        <SEO {...currentSEO} />
+
+        {/* Enhanced cosmic background */}
+        <CosmosBackground />
+
+        {/* Navigation Sidebar */}
+        <Sidebar
+          isOpen={sidebarOpen}
+          onToggle={toggleSidebar}
+          navItems={NAV_ITEMS}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
         />
 
-        {/* Page content with animations */}
-        <main className="p-4 sm:p-6 lg:p-8 xl:p-12 min-h-screen flex items-center justify-center relative z-10">
-          <div className="w-full max-w-7xl">
-            <Suspense fallback={<PageLoader />}>
-              <AnimatePresence mode="wait">
-                <Motion.div
-                  key={activeSection}
-                  initial="initial"
-                  animate="in"
-                  exit="out"
-                  variants={PAGE_VARIANTS}
-                  transition={PAGE_TRANSITION}
-                >
-                  <ActivePage />
-                </Motion.div>
-              </AnimatePresence>
-            </Suspense>
+        {/* Main content area */}
+        <Motion.div
+          className={`transition-all duration-200 ${
+            sidebarOpen ? "lg:ml-64 xl:ml-72" : "ml-0"
+          }`}
+          style={{ willChange: "margin-left" }}
+          onClick={handleMainContentClick}
+        >
+          {/* Header */}
+          <Header
+            onToggleSidebar={toggleSidebar}
+            currentSection={activeSection}
+            isSidebarOpen={sidebarOpen}
+          />
+
+          {/* Page content with animations */}
+          <main className="p-4 sm:p-6 lg:p-8 xl:p-12 min-h-screen flex items-center justify-center relative z-10">
+            <div className="w-full max-w-7xl">
+              <Suspense fallback={<PageLoader />}>
+                <AnimatePresence mode={prefersReducedMotion ? "sync" : "wait"}>
+                  <Motion.div
+                    key={activeSection}
+                    initial={prefersReducedMotion ? false : "initial"}
+                    animate="in"
+                    exit="out"
+                    variants={pageVariants}
+                    transition={pageTransition}
+                  >
+                    <ActivePage />
+                  </Motion.div>
+                </AnimatePresence>
+              </Suspense>
+            </div>
+          </main>
+        </Motion.div>
+
+        {/* Scroll to top button */}
+        <ScrollToTop />
+
+        {/* Performance monitor in development */}
+        {import.meta.env.DEV && (
+          <div className="fixed bottom-4 left-4 bg-black/50 text-white text-xs p-2 rounded">
+            Active: {activeSection} | Mobile: {isMobile ? "Yes" : "No"}
           </div>
-        </main>
-      </Motion.div>
-
-      {/* Scroll to top button */}
-      <ScrollToTop />
-
-      {/* Performance monitor in development */}
-      {import.meta.env.DEV && (
-        <div className="fixed bottom-4 left-4 bg-black/50 text-white text-xs p-2 rounded">
-          Active: {activeSection} | Mobile: {isMobile ? "Yes" : "No"}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </MotionConfig>
   );
 };
 
