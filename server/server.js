@@ -3,6 +3,8 @@ const cors = require("cors");
 const compression = require("compression");
 const axios = require("axios");
 const Redis = require("ioredis");
+const rateLimit = require("express-rate-limit");
+const promClient = require("prom-client");
 require("dotenv").config();
 
 const app = express();
@@ -36,6 +38,25 @@ const REDIS_CONNECT_TIMEOUT_MS = Number.parseInt(
   process.env.REDIS_CONNECT_TIMEOUT_MS || "1500",
   10,
 );
+const REDIS_RETRY_BASE_DELAY_MS = Number.parseInt(
+  process.env.REDIS_RETRY_BASE_DELAY_MS || "150",
+  10,
+);
+const REDIS_RETRY_MAX_DELAY_MS = Number.parseInt(
+  process.env.REDIS_RETRY_MAX_DELAY_MS || "2000",
+  10,
+);
+const REDIS_KEY_PREFIX = (process.env.REDIS_KEY_PREFIX || "ourwebsite:").trim();
+const API_RATE_LIMIT_WINDOW_MS = Number.parseInt(
+  process.env.API_RATE_LIMIT_WINDOW_MS || "60000",
+  10,
+);
+const API_RATE_LIMIT_MAX_REQUESTS = Number.parseInt(
+  process.env.API_RATE_LIMIT_MAX_REQUESTS || "120",
+  10,
+);
+const METRICS_ENABLED =
+  (process.env.METRICS_ENABLED || "true").trim().toLowerCase() !== "false";
 
 const resolveCorsOrigin = () => {
   if (!CORS_ORIGIN || CORS_ORIGIN === "*") {
@@ -104,38 +125,135 @@ const setNoStoreHeaders = (res) => {
   res.set("Cache-Control", "no-store");
 };
 
+const normalizeMetricsRoute = (routePath = "") => {
+  return routePath.replace(
+    /\/api\/youtube\/video\/[^/]+/g,
+    "/api/youtube/video/:videoId",
+  );
+};
+
+const metricsRegistry = new promClient.Registry();
+let apiRequestDurationMs = null;
+let apiRequestsTotal = null;
+
+if (METRICS_ENABLED) {
+  promClient.collectDefaultMetrics({ register: metricsRegistry });
+
+  apiRequestDurationMs = new promClient.Histogram({
+    name: "api_request_duration_ms",
+    help: "API request duration in milliseconds",
+    labelNames: ["method", "route", "status_code"],
+    buckets: [25, 50, 100, 200, 400, 800, 1200, 2000, 5000],
+    registers: [metricsRegistry],
+  });
+
+  apiRequestsTotal = new promClient.Counter({
+    name: "api_requests_total",
+    help: "Total number of API requests",
+    labelNames: ["method", "route", "status_code"],
+    registers: [metricsRegistry],
+  });
+}
+
+app.use((req, res, next) => {
+  if (!METRICS_ENABLED || !req.path.startsWith("/api")) {
+    return next();
+  }
+
+  const startTime = process.hrtime.bigint();
+
+  res.on("finish", () => {
+    if (!apiRequestDurationMs || !apiRequestsTotal) {
+      return;
+    }
+
+    const durationMs = Number(process.hrtime.bigint() - startTime) / 1e6;
+    const routeLabel = normalizeMetricsRoute(req.path);
+    const statusLabel = String(res.statusCode);
+
+    apiRequestDurationMs
+      .labels(req.method, routeLabel, statusLabel)
+      .observe(durationMs);
+
+    apiRequestsTotal.labels(req.method, routeLabel, statusLabel).inc();
+  });
+
+  return next();
+});
+
+const apiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  limit: API_RATE_LIMIT_MAX_REQUESTS,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: (req) =>
+    req.path === "/health" || req.path === "/" || req.path === "/metrics",
+  handler: (_req, res) => {
+    setNoStoreHeaders(res);
+    res.status(429).json(
+      createError("Too many requests. Please try again shortly.", {
+        code: "RATE_LIMITED",
+      }),
+    );
+  },
+});
+
+app.use("/api", apiRateLimiter);
+
 const apiResponseCache = new Map();
 
 const cacheStore = {
-  type: REDIS_URL ? "redis" : "memory",
+  type: "memory",
   redisClient: null,
   redisReady: false,
 };
 
+let lastRedisWarningAt = 0;
+
+const warnRedisFallback = (message) => {
+  const now = Date.now();
+  if (now - lastRedisWarningAt < 10000) {
+    return;
+  }
+
+  lastRedisWarningAt = now;
+  console.warn(message);
+};
+
 const setupRedisCache = () => {
   if (!REDIS_URL) {
+    cacheStore.type = "memory";
     return;
   }
 
   const redisClient = new Redis(REDIS_URL, {
     lazyConnect: true,
-    maxRetriesPerRequest: 1,
+    keyPrefix: REDIS_KEY_PREFIX || undefined,
+    maxRetriesPerRequest: 2,
     enableOfflineQueue: false,
     connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+    retryStrategy: (attempt) =>
+      Math.min(
+        Math.max(REDIS_RETRY_BASE_DELAY_MS, 50) * attempt,
+        Math.max(REDIS_RETRY_MAX_DELAY_MS, 200),
+      ),
   });
 
   redisClient.on("ready", () => {
     cacheStore.redisReady = true;
+    cacheStore.type = "redis";
     console.log("Redis cache connected.");
   });
 
   redisClient.on("end", () => {
     cacheStore.redisReady = false;
+    cacheStore.type = "memory";
   });
 
   redisClient.on("error", (error) => {
     cacheStore.redisReady = false;
-    console.warn(
+    cacheStore.type = "memory";
+    warnRedisFallback(
       `Redis cache unavailable. Using in-memory cache. ${error.message}`,
     );
   });
@@ -144,7 +262,8 @@ const setupRedisCache = () => {
 
   redisClient.connect().catch((error) => {
     cacheStore.redisReady = false;
-    console.warn(
+    cacheStore.type = "memory";
+    warnRedisFallback(
       `Unable to connect to Redis. Falling back to in-memory cache. ${error.message}`,
     );
   });
@@ -455,11 +574,18 @@ app.get("/api/health", (_req, res) => {
         service: "youtube-api-server",
         status: "ok",
         uptimeSeconds: Math.floor(process.uptime()),
-        cacheProvider:
-          cacheStore.redisReady && cacheStore.redisClient ? "redis" : "memory",
+        cacheProvider: cacheStore.type,
+        memoryCacheEntries: apiResponseCache.size,
+        redisEnabled: Boolean(REDIS_URL),
+        redisReady: cacheStore.redisReady,
+        metricsEnabled: METRICS_ENABLED,
       },
       {
         mode: YOUTUBE_API_KEY ? "live" : "demo",
+        rateLimit: {
+          windowMs: API_RATE_LIMIT_WINDOW_MS,
+          maxRequests: API_RATE_LIMIT_MAX_REQUESTS,
+        },
       },
     ),
   );
@@ -473,12 +599,29 @@ app.get("/api", (_req, res) => {
       message: "OUR-WEBSITE API is running",
       endpoints: [
         "/api/health",
+        "/api/metrics",
         "/api/youtube/search",
         "/api/youtube/video/:videoId",
         "/api/youtube/trending",
       ],
     }),
   );
+});
+
+app.get("/api/metrics", async (_req, res) => {
+  setNoStoreHeaders(res);
+
+  if (!METRICS_ENABLED) {
+    return res.status(404).json(createError("Metrics endpoint is disabled"));
+  }
+
+  try {
+    res.set("Content-Type", metricsRegistry.contentType);
+    const metricsText = await metricsRegistry.metrics();
+    return res.status(200).send(metricsText);
+  } catch {
+    return res.status(500).json(createError("Failed to render metrics"));
+  }
 });
 
 app.get("/api/youtube/search", async (req, res) => {
