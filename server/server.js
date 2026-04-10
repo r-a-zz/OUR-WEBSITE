@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
 const axios = require("axios");
+const Redis = require("ioredis");
 require("dotenv").config();
 
 const app = express();
@@ -28,6 +29,11 @@ const VIDEO_CACHE_TTL_MS = Number.parseInt(
 );
 const TRENDING_CACHE_TTL_MS = Number.parseInt(
   process.env.API_CACHE_TRENDING_TTL_MS || "180000",
+  10,
+);
+const REDIS_URL = (process.env.REDIS_URL || "").trim();
+const REDIS_CONNECT_TIMEOUT_MS = Number.parseInt(
+  process.env.REDIS_CONNECT_TIMEOUT_MS || "1500",
   10,
 );
 
@@ -82,9 +88,92 @@ const createError = (error, meta = {}) => ({
   ...meta,
 });
 
+const setApiCacheHeaders = (res, ttlMs) => {
+  const sharedMaxAge = Math.max(0, Math.floor(ttlMs / 1000));
+  const browserMaxAge = Math.min(sharedMaxAge, 30);
+  const staleWhileRevalidate = Math.max(60, Math.floor(sharedMaxAge / 2));
+
+  res.set(
+    "Cache-Control",
+    `public, max-age=${browserMaxAge}, s-maxage=${sharedMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
+  );
+  res.set("Vary", "Accept-Encoding, Origin");
+};
+
+const setNoStoreHeaders = (res) => {
+  res.set("Cache-Control", "no-store");
+};
+
 const apiResponseCache = new Map();
 
-const getCachedResponse = (cacheKey) => {
+const cacheStore = {
+  type: REDIS_URL ? "redis" : "memory",
+  redisClient: null,
+  redisReady: false,
+};
+
+const setupRedisCache = () => {
+  if (!REDIS_URL) {
+    return;
+  }
+
+  const redisClient = new Redis(REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+  });
+
+  redisClient.on("ready", () => {
+    cacheStore.redisReady = true;
+    console.log("Redis cache connected.");
+  });
+
+  redisClient.on("end", () => {
+    cacheStore.redisReady = false;
+  });
+
+  redisClient.on("error", (error) => {
+    cacheStore.redisReady = false;
+    console.warn(
+      `Redis cache unavailable. Using in-memory cache. ${error.message}`,
+    );
+  });
+
+  cacheStore.redisClient = redisClient;
+
+  redisClient.connect().catch((error) => {
+    cacheStore.redisReady = false;
+    console.warn(
+      `Unable to connect to Redis. Falling back to in-memory cache. ${error.message}`,
+    );
+  });
+};
+
+setupRedisCache();
+
+const parseCachedPayload = (rawValue) => {
+  try {
+    return JSON.parse(rawValue);
+  } catch {
+    return null;
+  }
+};
+
+const getCachedResponse = async (cacheKey) => {
+  if (cacheStore.redisReady && cacheStore.redisClient) {
+    try {
+      const rawPayload = await cacheStore.redisClient.get(cacheKey);
+      if (!rawPayload) {
+        return null;
+      }
+
+      return parseCachedPayload(rawPayload);
+    } catch {
+      // Fall through to in-memory cache when Redis is unavailable.
+    }
+  }
+
   const cached = apiResponseCache.get(cacheKey);
 
   if (!cached) {
@@ -99,8 +188,22 @@ const getCachedResponse = (cacheKey) => {
   return cached.payload;
 };
 
-const setCachedResponse = (cacheKey, payload, ttlMs) => {
+const setCachedResponse = async (cacheKey, payload, ttlMs) => {
   const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : SEARCH_CACHE_TTL_MS;
+
+  if (cacheStore.redisReady && cacheStore.redisClient) {
+    try {
+      await cacheStore.redisClient.set(
+        cacheKey,
+        JSON.stringify(payload),
+        "PX",
+        ttl,
+      );
+      return;
+    } catch {
+      // Fall through to in-memory cache when Redis write fails.
+    }
+  }
 
   if (apiResponseCache.size >= CACHE_MAX_ENTRIES) {
     const oldestCacheKey = apiResponseCache.keys().next().value;
@@ -344,12 +447,16 @@ const withComputedVideoFields = (video) => ({
 });
 
 app.get("/api/health", (_req, res) => {
+  setNoStoreHeaders(res);
+
   res.json(
     createSuccess(
       {
         service: "youtube-api-server",
         status: "ok",
         uptimeSeconds: Math.floor(process.uptime()),
+        cacheProvider:
+          cacheStore.redisReady && cacheStore.redisClient ? "redis" : "memory",
       },
       {
         mode: YOUTUBE_API_KEY ? "live" : "demo",
@@ -359,6 +466,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.get("/api", (_req, res) => {
+  setNoStoreHeaders(res);
+
   res.json(
     createSuccess({
       message: "OUR-WEBSITE API is running",
@@ -383,8 +492,10 @@ app.get("/api/youtube/search", async (req, res) => {
       .json(createError("Search query is required", { field: "q" }));
   }
 
+  setApiCacheHeaders(res, SEARCH_CACHE_TTL_MS);
+
   const cacheKey = `search:${query.toLowerCase()}:${maxResults}:${type}`;
-  const cachedResponse = getCachedResponse(cacheKey);
+  const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
@@ -398,7 +509,7 @@ app.get("/api/youtube/search", async (req, res) => {
       note: "Set YOUTUBE_API_KEY to enable live YouTube search.",
     });
 
-    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -423,7 +534,7 @@ app.get("/api/youtube/search", async (req, res) => {
       source: "youtube_api",
     });
 
-    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     const fallbackResults = getDemoSearchResults(query, maxResults);
@@ -437,7 +548,7 @@ app.get("/api/youtube/search", async (req, res) => {
         "YouTube API unavailable. Returned demo data.",
     });
 
-    setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, SEARCH_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   }
 });
@@ -451,8 +562,10 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
       .json(createError("Video ID is required", { field: "videoId" }));
   }
 
+  setApiCacheHeaders(res, VIDEO_CACHE_TTL_MS);
+
   const cacheKey = `video:${videoId}`;
-  const cachedResponse = getCachedResponse(cacheKey);
+  const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
@@ -468,7 +581,7 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
       source: "demo_data",
     });
 
-    setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -493,7 +606,7 @@ app.get("/api/youtube/video/:videoId", async (req, res) => {
       formattedViewCount: formatViewCount(videoDetails.viewCount),
     });
 
-    setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, VIDEO_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   } catch (error) {
     if (error.response?.status === 403) {
@@ -515,8 +628,10 @@ app.get("/api/youtube/trending", async (req, res) => {
   const categoryId = req.query.categoryId;
   const regionCode = String(req.query.regionCode || "US");
 
+  setApiCacheHeaders(res, TRENDING_CACHE_TTL_MS);
+
   const cacheKey = `trending:${maxResults}:${categoryId || "all"}:${regionCode}`;
-  const cachedResponse = getCachedResponse(cacheKey);
+  const cachedResponse = await getCachedResponse(cacheKey);
   if (cachedResponse) {
     return res.set("X-Cache", "HIT").json(cachedResponse);
   }
@@ -532,7 +647,7 @@ app.get("/api/youtube/trending", async (req, res) => {
       note: "Set YOUTUBE_API_KEY to enable live trending videos.",
     });
 
-    setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   }
 
@@ -566,7 +681,7 @@ app.get("/api/youtube/trending", async (req, res) => {
       source: "youtube_api",
     });
 
-    setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
+    await setCachedResponse(cacheKey, payload, TRENDING_CACHE_TTL_MS);
     return res.set("X-Cache", "MISS").json(payload);
   } catch (_error) {
     return res.status(500).json(createError("Failed to get trending videos"));
